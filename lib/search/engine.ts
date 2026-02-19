@@ -9,6 +9,7 @@ import { Platform } from 'react-native';
 import JSZip from 'jszip';
 import { Buffer } from 'buffer';
 import { normalizeAndEncodeSafUri, getSafDisplayName } from '../utils/saf';
+import { extractEpubText } from '../utils/epub';
 import { 
   SearchOptions, 
   SearchMatch, 
@@ -223,7 +224,7 @@ export class SearchEngine {
       console.log('[SearchEngine] [DEBUG] Reading file:', fixedUri.substring(0, 150));
       
       if (fixedUri.toLowerCase().endsWith('.epub')) {
-        return await this.readEpubContent(fixedUri);
+        return await extractEpubText(fixedUri);
       }
 
       // 使用 SAF 的 readAsStringAsync（通过 StorageAccessFramework 命名空间）
@@ -237,84 +238,6 @@ export class SearchEngine {
     }
   }
 
-  /** 读取 EPUB 内容并提取文本（简易版） */
-  private async readEpubContent(uri: string): Promise<string | null> {
-    try {
-      console.log('[SearchEngine] [DEBUG] Start extracting EPUB:', uri);
-      
-      // 使用 SAF API 读取 base64
-      const base64 = await SAF.readAsStringAsync(uri, { 
-        encoding: FileSystem.EncodingType.Base64 
-      });
-      console.log('[SearchEngine] [DEBUG] EPUB Base64 read, length:', base64.length);
-
-      const zip = await JSZip.loadAsync(Buffer.from(base64, 'base64'));
-      console.log('[SearchEngine] [DEBUG] EPUB Zip loaded');
-
-      // 1. 获取 OPF 路径
-      const containerFile = zip.file('META-INF/container.xml');
-      if (!containerFile) {
-        console.log('[SearchEngine] [DEBUG] EPUB has no container.xml');
-        return null;
-      }
-      
-      const containerXml = await containerFile.async('text');
-      const opfPathMatch = containerXml.match(/full-path="([^"]+)"/);
-      const opfPath = opfPathMatch ? opfPathMatch[1] : 'OEBPS/content.opf';
-      const rootDir = opfPath.includes('/') ? opfPath.substring(0, opfPath.lastIndexOf('/') + 1) : '';
-      console.log('[SearchEngine] [DEBUG] OPF path:', opfPath);
-
-      // 2. 解析 OPF
-      const opfFile = zip.file(opfPath);
-      if (!opfFile) {
-        console.log('[SearchEngine] [DEBUG] OPF file not found:', opfPath);
-        return null;
-      }
-
-      const opfText = await opfFile.async('text');
-      const itemMap: Record<string, string> = {};
-      const itemRegex = /<item[^>]+id="([^"]+)"[^>]+href="([^"]+)"/g;
-      let m;
-      while ((m = itemRegex.exec(opfText)) !== null) {
-        itemMap[m[1]] = m[2];
-      }
-
-      const spine: string[] = [];
-      const itemRefRegex = /<itemref[^>]+idref="([^"]+)"/g;
-      while ((m = itemRefRegex.exec(opfText)) !== null) {
-        const idref = m[1];
-        if (itemMap[idref]) {
-          spine.push(itemMap[idref]);
-        }
-      }
-      console.log('[SearchEngine] [DEBUG] Spine length:', spine.length);
-
-      // 3. 提取文本
-      const textParts: string[] = [];
-      for (const href of spine) {
-        if (this.isCancelled) break;
-        const decodedHref = decodeURIComponent(href);
-        const filePath = rootDir + decodedHref;
-        const file = zip.file(filePath);
-        if (file) {
-          const html = await file.async('text');
-          const text = html
-            .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
-            .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '')
-            .replace(/<[^>]+>/g, ' ')
-            .replace(/\s+/g, ' ')
-            .trim();
-          textParts.push(text);
-        }
-      }
-
-      console.log(`[SearchEngine] [DEBUG] EPUB extraction complete, length: ${textParts.length} parts`);
-      return textParts.join('\n\n');
-    } catch (error) {
-      console.error('[SearchEngine] [DEBUG] EPUB processing failed:', error);
-      return null;
-    }
-  }
 
   /** 读取目录内容 */
   private async readDirectory(uri: string): Promise<string[]> {

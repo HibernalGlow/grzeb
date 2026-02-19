@@ -2,9 +2,9 @@ import { useLocalSearchParams, Stack } from 'expo-router';
 import * as React from 'react';
 import { View, FlatList, ActivityIndicator, Alert, Dimensions } from 'react-native';
 import { Text } from '@/components/ui/text';
-import { WebView } from 'react-native-webview';
 import * as FileSystem from 'expo-file-system/legacy';
 import { normalizeAndEncodeSafUri } from '@/lib/utils/saf';
+import { extractEpubText } from '@/lib/utils/epub';
 
 /**
  * 极简文件 & 电子书查看器
@@ -28,9 +28,18 @@ export default function ViewerScreen() {
       try {
         setLoading(true);
         const lowerUri = uri.toLowerCase();
+        const isSaf = uri.startsWith('content://');
+        const normalizedUri = isSaf ? normalizeAndEncodeSafUri(uri) : uri;
 
         if (lowerUri.endsWith('.epub')) {
-          setFileType('epub');
+          setFileType('text'); // Treat as text
+          console.log('[Viewer] [DEBUG] Extracting text from EPUB:', normalizedUri);
+          const epubText = await extractEpubText(normalizedUri);
+          if (epubText) {
+            setContent(epubText.split('\n'));
+          } else {
+            throw new Error('EPUB 提取失败');
+          }
           setLoading(false);
           return;
         }
@@ -38,15 +47,10 @@ export default function ViewerScreen() {
         // 默认作为文本处理
         setFileType('text');
         
-        let contentText = '';
-        if (uri.startsWith('content://')) {
-          // Expo Router decodes params, but SAF API needs correctly encoded IDs
-          const fixedUri = normalizeAndEncodeSafUri(uri);
-          console.log('[Viewer] [DEBUG] Reading SAF URI:', fixedUri);
-          contentText = await FileSystem.StorageAccessFramework.readAsStringAsync(fixedUri);
-        } else {
-          contentText = await FileSystem.readAsStringAsync(uri);
-        }
+        console.log('[Viewer] [DEBUG] Reading text file:', normalizedUri);
+        const contentText = isSaf 
+          ? await FileSystem.StorageAccessFramework.readAsStringAsync(normalizedUri)
+          : await FileSystem.readAsStringAsync(normalizedUri);
 
         const lines = contentText.split('\n');
         setContent(lines);
@@ -64,7 +68,7 @@ export default function ViewerScreen() {
         }
       } catch (error) {
         console.error('Failed to load file:', error);
-        Alert.alert('错误', '无法读取文件内容');
+        Alert.alert('错误', '无法读取文件内容: ' + (error as Error).message);
         setLoading(false);
       }
     };
@@ -125,88 +129,11 @@ export default function ViewerScreen() {
         />
       )}
 
-      {fileType === 'epub' && (
-        <EpubViewer uri={uri} initialQuery={query} />
-      )}
-
       {fileType === 'unknown' && (
         <View className="flex-1 items-center justify-center p-8">
           <Text className="text-center text-muted-foreground">不支持的文件格式</Text>
         </View>
       )}
     </View>
-  );
-}
-
-/**
- * 简易 EPUB 阅读器组件
- */
-function EpubViewer({ uri, initialQuery }: { uri: string; initialQuery?: string }) {
-  const html = `
-    <!DOCTYPE html>
-    <html>
-    <head>
-      <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-      <script src="https://cdnjs.cloudflare.com/ajax/libs/epub.js/0.3.88/epub.min.js"></script>
-      <style>
-        body { margin: 0; padding: 0; background: transparent; overflow: hidden; font-family: sans-serif; }
-        #viewer { width: 100vw; height: 100vh; }
-      </style>
-    </head>
-    <body>
-      <div id="viewer"></div>
-      <script>
-        var book = ePub("${uri}");
-        var rendition = book.renderTo("viewer", {
-          width: "100%",
-          height: "100%",
-          flow: "paginated",
-          manager: "default"
-        });
-
-        book.ready.then(function() {
-          // 如果有初始搜索词，尝试定位
-          if ("${initialQuery || ''}") {
-            return book.find("${initialQuery || ''}");
-          }
-        }).then(function(results) {
-          if (results && results.length > 0) {
-            rendition.display(results[0].cfi);
-            // 这里可以添加高亮逻辑
-            results.forEach(result => {
-              rendition.annotations.add("highlight", result.cfi, {}, (e) => {
-                console.log("annotation clicked", e);
-              }, "hl");
-            });
-          } else {
-            rendition.display();
-          }
-        }).catch(function(err) {
-          rendition.display();
-          console.error("Epub display error:", err);
-        });
-
-        // 监听点击翻页
-        document.addEventListener('click', function(e) {
-          const width = window.innerWidth;
-          if (e.clientX < width / 3) rendition.prev();
-          else if (e.clientX > width * 2 / 3) rendition.next();
-        });
-
-        window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'ready' }));
-      </script>
-    </body>
-    </html>
-  `;
-
-  return (
-    <WebView
-      source={{ html }}
-      style={{ flex: 1, backgroundColor: 'transparent' }}
-      originWhitelist={['*']}
-      allowFileAccess={true}
-      allowFileAccessFromFileURLs={true}
-      allowUniversalAccessFromFileURLs={true}
-    />
   );
 }
