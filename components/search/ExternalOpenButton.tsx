@@ -56,14 +56,24 @@ export function ExternalOpenButton({ uri, filename, className }: ExternalOpenBut
         if (isLongPress) {
           const defaultPackage = settings.defaultApps[ext];
           Alert.alert(
-            '外部打开选项',
+            '外部打开管理',
             `后缀: .${ext}\n当前内部默认: ${defaultPackage || '无'}`,
             [
               { text: '取消', style: 'cancel' },
               { 
-                text: '清除内部默认记录', 
+                text: '清除内部默认', 
                 onPress: () => setDefaultApp(ext, null),
                 style: 'destructive' 
+              },
+              { 
+                text: '系统默认应用设置', 
+                onPress: () => {
+                   IntentLauncher.startActivityAsync('android.settings.MANAGE_DEFAULT_APPS_SETTINGS')
+                   .catch(() => {
+                     // Fallback to general settings if the specific one fails
+                     IntentLauncher.startActivityAsync('android.settings.SETTINGS');
+                   });
+                }
               },
               { 
                 text: '尝试重新选择应用', 
