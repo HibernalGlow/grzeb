@@ -22,8 +22,11 @@ import {
   Platform,
   Alert,
 } from 'react-native';
-import { Stack, useRouter } from 'expo-router';
-import * as DocumentPicker from 'expo-document-picker';
+import { Stack } from 'expo-router';
+import * as FileSystem from 'expo-file-system/legacy';
+
+// StorageAccessFramework 命名空间
+const SAF = FileSystem.StorageAccessFramework;
 
 /** 搜索选项状态 */
 interface SearchOptionsState {
@@ -34,8 +37,6 @@ interface SearchOptionsState {
 }
 
 export default function SearchScreen() {
-  const router = useRouter();
-  
   // 搜索状态
   const [query, setQuery] = React.useState('');
   const [selectedDir, setSelectedDir] = React.useState<string | null>(null);
@@ -61,21 +62,33 @@ export default function SearchScreen() {
   /** 选择搜索目录 */
   const pickDirectory = async () => {
     try {
-      const result = await DocumentPicker.getDocumentAsync({
-        type: '*/*',
-        copyToCacheDirectory: false,
-      });
-      
-      if (!result.canceled && result.assets && result.assets.length > 0) {
-        // 从文件路径提取目录
-        const fileUri = result.assets[0].uri;
-        // expo-document-picker 返回的是文件，我们需要获取其目录
-        // 注意：expo 没有直接的目录选择器，这里使用文件选择作为替代
-        const dirUri = fileUri.substring(0, fileUri.lastIndexOf('/'));
-        setSelectedDir(dirUri);
+      // Android 使用 StorageAccessFramework 获取目录权限
+      if (Platform.OS === 'android') {
+        const permissions = await SAF.requestDirectoryPermissionsAsync();
+        
+        if (permissions.granted) {
+          // permissions.directoryUri 是 content:// 格式的 URI
+          setSelectedDir(permissions.directoryUri);
+        } else {
+          // 用户拒绝了权限请求
+          Alert.alert('权限被拒绝', '需要目录访问权限才能搜索文件');
+        }
+      } else if (Platform.OS === 'ios') {
+        // iOS 使用 document directory
+        const docDir = FileSystem.documentDirectory;
+        if (docDir) {
+          setSelectedDir(docDir);
+        }
+      } else {
+        // Web 或其他平台 - 使用示例目录
+        const docDir = FileSystem.documentDirectory;
+        if (docDir) {
+          setSelectedDir(docDir);
+        }
       }
     } catch (error) {
       console.error('选择目录失败:', error);
+      Alert.alert('错误', '选择目录失败，请重试');
     }
   };
   

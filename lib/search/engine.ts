@@ -1,9 +1,14 @@
 /**
  * 全文搜索引擎核心实现
  * 参考 Markor 的 FileSearchEngine 优化策略
+ * 支持 Android StorageAccessFramework (content:// URI)
  */
 
-import * as FileSystem from 'expo-file-system';
+import * as FileSystem from 'expo-file-system/legacy';
+import { Platform } from 'react-native';
+
+// 从 legacy 模块获取 StorageAccessFramework
+const SAF = FileSystem.StorageAccessFramework;
 import { 
   SearchOptions, 
   SearchMatch, 
@@ -24,6 +29,8 @@ const TEXT_EXTENSIONS = new Set([
   '.yaml', '.yml', '.toml', '.ini', '.cfg', '.conf',
   '.log', '.csv', '.tsv', '.sql', '.r', '.lua',
   '.org', '.adoc', '.rst', '.tex', '.bib',
+  // 小说常见格式
+  '.epub', '.mobi', '.fb2', '.rtf',
 ]);
 
 /** 默认忽略的目录正则 */
@@ -36,8 +43,17 @@ const DEFAULT_IGNORED_PATTERNS = [
   /^\.cache$/i,
   /^\.tmp$/i,
   /^thumbs$/i,
-  /^\./, // 隐藏目录
 ];
+
+/** 检查是否为 Android SAF URI */
+function isSafUri(uri: string): boolean {
+  return uri.startsWith('content://');
+}
+
+/** 检查是否为隐藏目录 */
+function isHiddenDir(name: string): boolean {
+  return name.startsWith('.');
+}
 
 export class SearchEngine {
   private options: SearchOptions;
@@ -55,12 +71,14 @@ export class SearchEngine {
   private regex: RegExp | null = null;
   private ignoredPatterns: RegExp[] = [];
   private ignoredExact: Set<string> = new Set();
+  private isAndroidSaf: boolean = false;
 
   constructor(options: Partial<SearchOptions>, callbacks: SearchCallbacks = {}) {
     this.options = { ...DEFAULT_SEARCH_OPTIONS, ...options } as SearchOptions;
     this.callbacks = callbacks;
     this.parseIgnoredDirs();
     this.buildRegex();
+    this.isAndroidSaf = Platform.OS === 'android' && isSafUri(this.options.rootDir);
   }
 
   /** 解析忽略目录配置 */
@@ -70,14 +88,12 @@ export class SearchEngine {
 
     for (const pattern of this.options.ignoredDirs) {
       if (pattern.startsWith('^') || pattern.endsWith('$') || pattern.includes('*')) {
-        // 正则模式
         try {
           this.ignoredPatterns.push(new RegExp(pattern, 'i'));
         } catch {
           // 忽略无效正则
         }
       } else {
-        // 精确匹配
         this.ignoredExact.add(pattern.toLowerCase());
       }
     }
@@ -96,7 +112,6 @@ export class SearchEngine {
     let flags = isCaseSensitive ? 'gm' : 'gim';
 
     if (!isRegex) {
-      // 转义特殊字符
       pattern = pattern.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
     }
 
@@ -115,16 +130,19 @@ export class SearchEngine {
   private shouldIgnore(name: string): boolean {
     const lowerName = name.toLowerCase();
     
-    // 精确匹配
     if (this.ignoredExact.has(lowerName)) {
       return true;
     }
 
-    // 正则匹配
     for (const pattern of this.ignoredPatterns) {
       if (pattern.test(name)) {
         return true;
       }
+    }
+
+    // 跳过隐藏目录
+    if (isHiddenDir(name)) {
+      return true;
     }
 
     return false;
@@ -132,7 +150,9 @@ export class SearchEngine {
 
   /** 检查是否为文本文件 */
   private isTextFile(filename: string): boolean {
-    const ext = filename.toLowerCase().slice(filename.lastIndexOf('.'));
+    const dotIndex = filename.lastIndexOf('.');
+    if (dotIndex === -1) return false;
+    const ext = filename.toLowerCase().slice(dotIndex);
     return TEXT_EXTENSIONS.has(ext) || this.options.includeExtensions.includes(ext);
   }
 
@@ -146,7 +166,6 @@ export class SearchEngine {
   ): string {
     const { contextLines, maxPreviewLength } = this.options;
     
-    // 获取上下文行
     const startLine = Math.max(0, matchedLine - contextLines);
     const endLine = Math.min(lines.length - 1, matchedLine + contextLines);
     
@@ -155,17 +174,14 @@ export class SearchEngine {
     for (let i = startLine; i <= endLine; i++) {
       let line = lines[i];
       
-      // 截断过长的行
       if (line.length > maxPreviewLength) {
         if (i === matchedLine) {
-          // 匹配行：显示匹配位置附近
           const matchPosInLine = this.findMatchPositionInLine(content, matchStart, matchedLine, lines);
           const offset = Math.floor((maxPreviewLength - (matchEnd - matchStart)) / 2);
           const subStart = Math.max(0, matchPosInLine - offset);
           const subEnd = Math.min(line.length, matchPosInLine + (matchEnd - matchStart) + offset);
           line = (subStart > 0 ? '…' : '') + line.slice(subStart, subEnd) + (subEnd < line.length ? '…' : '');
         } else {
-          // 非匹配行：截断
           line = line.slice(0, maxPreviewLength) + (line.length > maxPreviewLength ? '…' : '');
         }
       }
@@ -185,9 +201,73 @@ export class SearchEngine {
   ): number {
     let pos = 0;
     for (let i = 0; i < matchedLine; i++) {
-      pos += lines[i].length + 1; // +1 for newline
+      pos += lines[i].length + 1;
     }
     return matchStart - pos;
+  }
+
+  /** 读取文件内容（支持 SAF 和普通文件系统） */
+  private async readFileContent(uri: string): Promise<string | null> {
+    try {
+      if (this.isAndroidSaf) {
+        // Android SAF 方式读取
+        return await SAF.readAsStringAsync(uri);
+      } else {
+        // 普通文件系统读取
+        return await FileSystem.readAsStringAsync(uri);
+      }
+    } catch {
+      return null;
+    }
+  }
+
+  /** 读取目录内容（支持 SAF 和普通文件系统） */
+  private async readDirectory(uri: string): Promise<string[]> {
+    try {
+      if (this.isAndroidSaf) {
+        // Android SAF 方式
+        return await SAF.readDirectoryAsync(uri);
+      } else {
+        // 普通文件系统
+        return await FileSystem.readDirectoryAsync(uri);
+      }
+    } catch {
+      return [];
+    }
+  }
+
+  /** 获取文件信息 */
+  private async getFileInfo(uri: string): Promise<{ exists: boolean; isDirectory: boolean; size?: number }> {
+    try {
+      if (this.isAndroidSaf) {
+        // SAF 没有 getInfoAsync，需要通过尝试读取来判断
+        // 先尝试作为目录读取
+        try {
+          await SAF.readDirectoryAsync(uri);
+          return { exists: true, isDirectory: true };
+        } catch {
+          // 不是目录，尝试作为文件
+          try {
+            const content = await SAF.readAsStringAsync(uri);
+            return { exists: true, isDirectory: false, size: content.length };
+          } catch {
+            return { exists: false, isDirectory: false };
+          }
+        }
+      } else {
+        const info = await FileSystem.getInfoAsync(uri);
+        if ('exists' in info) {
+          return { 
+            exists: info.exists, 
+            isDirectory: 'isDirectory' in info ? info.isDirectory : false,
+            size: 'size' in info ? info.size : undefined,
+          };
+        }
+        return { exists: false, isDirectory: false };
+      }
+    } catch {
+      return { exists: false, isDirectory: false };
+    }
   }
 
   /** 在单个文件中搜索 */
@@ -208,15 +288,13 @@ export class SearchEngine {
     };
 
     try {
-      // 获取文件信息
-      const info = await FileSystem.getInfoAsync(uri);
-      if (!info.exists || info.isDirectory) {
+      // 读取文件内容
+      const content = await this.readFileContent(uri);
+      if (!content) {
         return null;
       }
-      result.size = 'size' in info ? info.size : undefined;
-
-      // 读取文件内容
-      const content = await FileSystem.readAsStringAsync(uri);
+      
+      result.size = content.length;
       const lines = content.split('\n');
 
       // 搜索匹配
@@ -226,7 +304,6 @@ export class SearchEngine {
       while ((match = this.regex.exec(content)) !== null) {
         if (this.isCancelled) break;
 
-        // 避免无限循环（零宽匹配）
         if (seenPositions.has(match.index)) {
           this.regex.lastIndex++;
           continue;
@@ -244,7 +321,6 @@ export class SearchEngine {
           charCount += lines[i].length + 1;
         }
 
-        // 提取上下文
         const preview = this.extractContext(
           content,
           lines,
@@ -263,24 +339,32 @@ export class SearchEngine {
 
         result.matchCount++;
 
-        // 如果只找第一个匹配
         if (this.options.isOnlyFirstMatch) {
           break;
         }
       }
-    } catch (error) {
-      // 文件读取失败，静默忽略
+    } catch {
       return null;
     }
 
     return result.matches.length > 0 ? result : null;
   }
 
+  /** 构建 URI */
+  private buildUri(dirUri: string, entry: string): string {
+    if (this.isAndroidSaf) {
+      // Android SAF URI 格式
+      return dirUri.endsWith('/') ? dirUri + encodeURIComponent(entry) : dirUri + '/' + encodeURIComponent(entry);
+    } else {
+      return dirUri.endsWith('/') ? dirUri + entry : dirUri + '/' + entry;
+    }
+  }
+
   /** 遍历目录 */
   private async walkDirectory(
     dirUri: string,
     depth: number,
-    trimLength: number
+    rootLength: number
   ): Promise<void> {
     if (this.isCancelled || depth > this.options.maxDepth) {
       return;
@@ -289,30 +373,32 @@ export class SearchEngine {
     this.progress.currentDepth = depth;
 
     try {
-      const entries = await FileSystem.readDirectoryAsync(dirUri);
+      const entries = await this.readDirectory(dirUri);
       this.progress.pendingDirs = entries.length;
 
       for (const entry of entries) {
         if (this.isCancelled) break;
 
-        const entryUri = dirUri.endsWith('/') 
-          ? dirUri + entry 
-          : dirUri + '/' + entry;
-        const relPath = entryUri.slice(trimLength);
+        // 解码 entry 名称（SAF 可能编码）
+        const entryName = decodeURIComponent(entry.split('/').pop() || entry);
+        const entryUri = this.buildUri(dirUri, entryName);
+        
+        // 计算相对路径
+        const relPath = this.isAndroidSaf 
+          ? entryName 
+          : entryUri.slice(rootLength);
 
         // 检查是否忽略
-        if (this.shouldIgnore(entry)) {
+        if (this.shouldIgnore(entryName)) {
           continue;
         }
 
         try {
-          const info = await FileSystem.getInfoAsync(entryUri);
+          const info = await this.getFileInfo(entryUri);
           
           if (info.isDirectory) {
-            // 递归目录
-            await this.walkDirectory(entryUri, depth + 1, trimLength);
-          } else if (info.exists && this.isTextFile(entry)) {
-            // 搜索文件内容
+            await this.walkDirectory(entryUri, depth + 1, rootLength);
+          } else if (info.exists && this.isTextFile(entryName)) {
             this.progress.currentFile = relPath;
             this.progress.scannedFiles++;
             
@@ -322,25 +408,22 @@ export class SearchEngine {
               this.results.push(result);
               this.progress.totalMatches += result.matchCount;
               
-              // 增量回调
               if (this.callbacks.onResult) {
                 this.callbacks.onResult(result);
               }
             }
 
-            // 进度回调
             if (this.callbacks.onProgress) {
               this.callbacks.onProgress({ ...this.progress });
             }
 
-            // 让出事件循环，避免阻塞UI
             await new Promise(resolve => setTimeout(resolve, 0));
           }
         } catch {
-          // 忽略单个文件的错误
+          // 忽略单个条目的错误
         }
       }
-    } catch (error) {
+    } catch {
       // 目录读取失败
     }
   }
@@ -366,10 +449,10 @@ export class SearchEngine {
       isComplete: false,
     };
 
-    const trimLength = this.options.rootDir.length + 1;
+    const rootLength = this.options.rootDir.length + 1;
 
     try {
-      await this.walkDirectory(this.options.rootDir, 0, trimLength);
+      await this.walkDirectory(this.options.rootDir, 0, rootLength);
     } catch (error) {
       this.state = 'error';
       if (this.callbacks.onError) {
