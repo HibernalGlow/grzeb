@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>Grzeb Monaco Reader</title>
+  <!-- EPUB.js -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/epub.js/0.3.88/epub.min.js"></script>
+  <!-- Monaco Editor loader -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.52.0/min/vs/loader.min.js"></script>
+  <style>
+    body, html { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; background-color: #ffffff; color: #333333; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
+    #viewer-container { width: 100%; height: 100%; display: none; }
+    #epub-viewer { width: 100%; height: 100%; }
+    #monaco-viewer { width: 100%; height: 100%; }
+    body.dark { background-color: #1a1a1a; color: #e0e0e0; }
+    body.sepia { background-color: #f4ecd8; color: #5b4636; }
+    #loading { position: absolute; top: 0; left: 0; width: 100%; height: 100%; display: flex; justify-content: center; align-items: center; background: rgba(255,255,255,0.8); z-index: 1000; }
+  </style>
+</head>
+<body>
+  <div id="loading">Monaco Loading...</div>
+  <div id="viewer-container">
+    <div id="epub-viewer"></div>
+    <div id="monaco-viewer"></div>
+  </div>
+
+  <script>
+    let book = null, rendition = null, editor = null, currentMode = null;
+
+    require.config({ paths: { 'vs': 'https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.52.0/min/vs' }});
+
+    function send(type, data) {
+      if (window.ReactNativeWebView) window.ReactNativeWebView.postMessage(JSON.stringify({ type, ...data }));
+    }
+
+    function initEpub(data) {
+      const { content, targetCfi, settings } = data;
+      document.getElementById('epub-viewer').style.display = 'block';
+      document.getElementById('monaco-viewer').style.display = 'none';
+      document.getElementById('viewer-container').style.display = 'block';
+      document.getElementById('loading').style.display = 'none';
+
+      book = ePub(content, { encoding: 'base64' });
+      rendition = book.renderTo("epub-viewer", { width: "100%", height: "100%", flow: "scrolled", manager: "continuous" });
+      rendition.display(targetCfi || undefined).then(() => {
+        send('ready', { mode: 'epub' });
+        if (settings) updateSettings(settings);
+      });
+      book.getNavigation().then(nav => send('toc', { toc: nav.toc }));
+    }
+
+    function initMonaco(data) {
+      const { content, targetLine, settings } = data;
+      document.getElementById('epub-viewer').style.display = 'none';
+      document.getElementById('monaco-viewer').style.display = 'block';
+      document.getElementById('viewer-container').style.display = 'block';
+      document.getElementById('loading').style.display = 'none';
+
+      require(['vs/editor/editor.main'], function() {
+        if (!editor) {
+          editor = monaco.editor.create(document.getElementById('monaco-viewer'), {
+            value: content,
+            language: 'plaintext',
+            readOnly: true,
+            automaticLayout: true,
+            minimap: { enabled: true },
+            fontSize: settings?.fontSize || 18,
+            theme: settings?.theme === 'dark' ? 'vs-dark' : 'vs',
+            wordWrap: 'on',
+            lineNumbers: 'on',
+            renderLineHighlight: 'all',
+            scrollBeyondLastLine: false,
+          });
+        } else {
+          editor.setValue(content);
+        }
+
+        if (targetLine !== undefined) {
+          editor.revealLineInCenter(targetLine + 1);
+          editor.setPosition({ lineNumber: targetLine + 1, column: 1 });
+        }
+        send('ready', { mode: 'text' });
+      });
+    }
+
+    function updateSettings(s) {
+      document.body.className = s.theme || 'light';
+      if (currentMode === 'epub' && rendition) {
+        rendition.themes.fontSize((s.fontSize || 18) + 'px');
+        const color = (s.theme === 'dark') ? '#eee' : (s.theme === 'sepia' ? '#5b4636' : '#333');
+        rendition.themes.default({ body: { color: color + ' !important' } });
+      }
+      if (currentMode === 'text' && editor) {
+        editor.updateOptions({
+          fontSize: s.fontSize || 18,
+          theme: s.theme === 'dark' ? 'vs-dark' : 'vs',
+          wordWrap: s.wrap ? 'on' : 'off'
+        });
+      }
+    }
+
+    window.addEventListener('message', (event) => {
+      let data;
+      try { data = JSON.parse(event.data); } catch (e) { return; }
+      switch (data.type) {
+        case 'load':
+          currentMode = data.mode;
+          if (data.mode === 'epub') initEpub(data); else initMonaco(data);
+          break;
+        case 'search':
+          if (editor) editor.getAction('actions.find').run();
+          break;
+        case 'goto':
+          if (editor) {
+            editor.revealLineInCenter(data.line + 1);
+            editor.setPosition({ lineNumber: data.line + 1, column: 1 });
+          } else if (rendition) rendition.display(data.cfi);
+          break;
+        case 'settings':
+          updateSettings(data.settings);
+          break;
+      }
+    });
+    send('mounted', {});
+  </script>
+</body>
+</html>
