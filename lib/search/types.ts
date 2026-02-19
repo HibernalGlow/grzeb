@@ -44,6 +44,8 @@ export interface SearchMatch {
   preview: string;
   /** 预览开始的行号（用于渲染定位） */
   previewStartLine: number;
+  /** 匹配项在匹配行中的相对索引 */
+  indexInLine: number;
 }
 
 /** 文件搜索结果 */

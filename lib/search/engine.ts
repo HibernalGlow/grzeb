@@ -337,6 +337,8 @@ export class SearchEngine {
           lineNumber
         );
 
+        const indexInLine = this.findMatchPositionInLine(content, match.index, lineNumber, lines);
+        
         result.matches.push({
           matchText: match[0],
           start: match.index,
@@ -344,6 +346,7 @@ export class SearchEngine {
           lineNumber,
           preview,
           previewStartLine: startLine,
+          indexInLine,
         });
 
         result.matchCount++;

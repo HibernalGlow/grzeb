@@ -23,47 +23,63 @@ function HighlightedText({
   text, 
   matchText, 
   lineNumber,
-  previewStartLine
+  previewStartLine,
+  indexInLine
 }: { 
   text: string; 
   matchText: string;
   lineNumber: number;
   previewStartLine: number;
+  indexInLine: number;
 }) {
   // 按行分割
   const lines = text.split('\n');
+  const safeStartLine = typeof previewStartLine === 'number' ? previewStartLine : 0;
   
   const elements: React.ReactNode[] = [];
   
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
-    const currentAbsoluteLine = previewStartLine + i;
+    const currentAbsoluteLine = safeStartLine + i;
     const isMatchLine = currentAbsoluteLine === lineNumber;
     
-    // 在匹配行中高亮关键词
-    if (isMatchLine) {
-      const lowerLine = line.toLowerCase();
-      const lowerMatch = matchText.toLowerCase();
-      const matchIndex = lowerLine.indexOf(lowerMatch);
+    // 在匹配行中使用 indexInLine 直接高亮
+    if (isMatchLine && typeof indexInLine === 'number') {
+      // 如果行被截断了，需要调整 indexInLine
+      // 注意：目前的 extractContext 逻辑中，如果行被截断，
+      // match 会居中显示，原来的 indexInLine 就不再适用。
+      // 为简单起见，如果截断包含 "..."，我们重新寻找索引。
       
-      if (matchIndex >= 0) {
-        const before = line.slice(0, matchIndex);
-        const matched = line.slice(matchIndex, matchIndex + matchText.length);
-        const after = line.slice(matchIndex + matchText.length);
-        
-        elements.push(
-          <View key={i} className="flex-row flex-wrap py-0.5">
-            <Text className="text-xs text-muted-foreground">{`${currentAbsoluteLine + 1}: `}</Text>
-            <Text className="text-xs text-foreground" numberOfLines={1}>{before}</Text>
-            <Text className="text-xs bg-yellow-500/30 text-yellow-700 dark:text-yellow-300 font-semibold" numberOfLines={1}>{matched}</Text>
-            <Text className="text-xs text-foreground" numberOfLines={1}>{after}</Text>
-          </View>
-        );
-        continue;
+      let highlightStart = indexInLine;
+      let highlightEnd = indexInLine + matchText.length;
+      
+      // 检测是否为截断行 (包含 '...')
+      if (line.includes('...')) {
+        const lowerLine = line.toLowerCase();
+        const lowerMatch = matchText.toLowerCase();
+        const idx = lowerLine.indexOf(lowerMatch);
+        if (idx >= 0) {
+          highlightStart = idx;
+          highlightEnd = idx + matchText.length;
+        }
       }
+
+      const before = line.slice(0, highlightStart);
+      const matched = line.slice(highlightStart, highlightEnd);
+      const after = line.slice(highlightEnd);
+      
+      elements.push(
+        <View key={i} className="flex-row flex-wrap py-0.5">
+          <Text className="text-xs text-muted-foreground">{`${currentAbsoluteLine + 1}: `}</Text>
+          <Text className="text-xs text-foreground" numberOfLines={1}>{before}</Text>
+          <Text className="text-xs bg-yellow-500/30 text-yellow-700 dark:text-yellow-300 font-semibold" numberOfLines={1}>{matched}</Text>
+          <Text className="text-xs text-foreground" numberOfLines={1}>{after}</Text>
+        </View>
+      );
+      continue;
     }
     
-    // 普通行（带起始行号）
+    // 普通行
     elements.push(
       <Text key={i} className="text-xs text-muted-foreground py-0.5" numberOfLines={1}>
         {`${currentAbsoluteLine + 1}: ${line}`}
@@ -90,6 +106,7 @@ function MatchPreview({
           matchText={match.matchText}
           lineNumber={match.lineNumber}
           previewStartLine={match.previewStartLine}
+          indexInLine={match.indexInLine}
         />
       </View>
     </Pressable>
