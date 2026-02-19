@@ -44,62 +44,75 @@ export function ExternalOpenButton({ uri, filename, className }: ExternalOpenBut
       const cachedUri = await copySafToCache(uri, filename);
       if (!cachedUri) throw new Error('无法准备临时文件');
 
-      // 获取文件后缀和 MIME Type
       const ext = uri.split('.').pop()?.toLowerCase() || '';
       const mimeType = getMimeType(uri);
       
-      // 这里的 cachedUri 是 file:// 路径
-      // Android Intent Launcher 需要 content:// (FileProvider) 或者 file://
-      // expo-file-system 的 getContentUriAsync 可以获取 content:// URI
+      // Android 需要 content:// (FileProvider)
       const contentUri = Platform.OS === 'android' 
         ? await FileSystem.getContentUriAsync(cachedUri)
         : cachedUri;
 
       if (Platform.OS === 'android') {
-        const defaultPackage = settings.defaultApps[ext];
-
-        if (isLongPress || !defaultPackage) {
-          // 长按或未设置默认应用：使用系统选择器
-          // 注意：IntentLauncher 不直接支持选择器并返回结果，
-          // 我们使用 Sharing.shareAsync 或者发送不带包名的 Intent
-          if (isLongPress) {
-            // 提供清除默认设置的选项
-            Alert.alert(
-              '打开方式',
-              `当前后缀 (${ext}) 的默认应用: ${defaultPackage || '未设置'}`,
-              [
-                { text: '取消', style: 'cancel' },
-                { 
-                  text: '清除默认应用', 
-                  onPress: () => setDefaultApp(ext, null),
-                  style: 'destructive' 
-                },
-                { 
-                  text: '使用系统选择器', 
-                  onPress: () => Sharing.shareAsync(cachedUri) 
-                }
-              ]
-            );
-          } else {
-            // 单击且无默认：直接调用分享/打开对话框
-            await Sharing.shareAsync(cachedUri);
-          }
+        if (isLongPress) {
+          const defaultPackage = settings.defaultApps[ext];
+          Alert.alert(
+            '外部打开选项',
+            `后缀: .${ext}\n当前内部默认: ${defaultPackage || '无'}`,
+            [
+              { text: '取消', style: 'cancel' },
+              { 
+                text: '清除内部默认记录', 
+                onPress: () => setDefaultApp(ext, null),
+                style: 'destructive' 
+              },
+              { 
+                text: '尝试重新选择应用', 
+                onPress: async () => {
+                  try {
+                    await IntentLauncher.startActivityAsync('android.intent.action.VIEW', {
+                      data: contentUri,
+                      type: mimeType,
+                      flags: 1, // FLAG_GRANT_READ_URI_PERMISSION
+                    });
+                  } catch (e) {
+                    Alert.alert('打开失败', '找不到支持该格式的应用');
+                  }
+                } 
+              }
+            ]
+          );
         } else {
-          // 使用记忆的默认包名打开
+          // 单击：尝试使用内部记录的默认包名，或者发送通用 VIEW Intent
+          const defaultPackage = settings.defaultApps[ext];
+          
           try {
-            await IntentLauncher.startActivityAsync('android.intent.action.VIEW', {
+            const intentParams: IntentLauncher.IntentLauncherParams = {
               data: contentUri,
               type: mimeType,
-              packageName: defaultPackage,
               flags: 1, // FLAG_GRANT_READ_URI_PERMISSION
-            });
+            };
+            
+            if (defaultPackage) {
+              intentParams.packageName = defaultPackage;
+            }
+
+            await IntentLauncher.startActivityAsync('android.intent.action.VIEW', intentParams);
           } catch (e) {
-            console.warn('[ExternalOpen] Default app failed, falling back to picker', e);
-            await Sharing.shareAsync(cachedUri);
+            console.warn('[ExternalOpen] View intent failed', e);
+            // 如果带包名失败了，可能是应用卸载了，回退到通用选择
+            if (defaultPackage) {
+               await IntentLauncher.startActivityAsync('android.intent.action.VIEW', {
+                data: contentUri,
+                type: mimeType,
+                flags: 1,
+              });
+            } else {
+              Alert.alert('提示', '没有找到能处理该文件的应用');
+            }
           }
         }
       } else {
-        // iOS 统一使用 Sharing
+        // iOS 仍然推荐使用 Sharing，因为它内置了系统选择器和各种预览/打开操作
         await Sharing.shareAsync(cachedUri);
       }
     } catch (error) {
