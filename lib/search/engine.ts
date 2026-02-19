@@ -8,6 +8,7 @@ import * as FileSystem from 'expo-file-system/legacy';
 import { Platform } from 'react-native';
 import JSZip from 'jszip';
 import { Buffer } from 'buffer';
+import { normalizeAndEncodeSafUri, getSafDisplayName } from '../utils/saf';
 import { 
   SearchOptions, 
   SearchMatch, 
@@ -218,7 +219,7 @@ export class SearchEngine {
   /** 读取文件内容 */
   private async readFileContent(uri: string): Promise<string | null> {
     try {
-      const fixedUri = this.normalizeAndEncodeSafUri(uri);
+      const fixedUri = normalizeAndEncodeSafUri(uri);
       console.log('[SearchEngine] [DEBUG] Reading file:', fixedUri.substring(0, 150));
       
       if (fixedUri.toLowerCase().endsWith('.epub')) {
@@ -233,56 +234,6 @@ export class SearchEngine {
     } catch (error) {
       console.error('[SearchEngine] [DEBUG] Read file error:', error);
       return null;
-    }
-  }
-
-  /** 规范化并重新编码 SAF URI */
-  private normalizeAndEncodeSafUri(uri: string): string {
-    if (!uri || !uri.startsWith('content://')) return uri;
-    
-    try {
-      // 1. 先解码，拿到最原始的字符串结构（包含 / 和 :）
-      const decoded = decodeURIComponent(uri);
-      
-      // 2. 提取 Authority 和路径
-      const match = decoded.match(/^content:\/\/([^/]+)(\/.+)$/);
-      if (!match) return uri;
-      
-      const authority = match[1];
-      const path = match[2];
-      
-      // 3. 寻找 tree 和 document 标记，手动截取 ID
-      const treeToken = '/tree/';
-      const docToken = '/document/';
-      
-      const treeIdx = path.indexOf(treeToken);
-      const docIdx = path.indexOf(docToken);
-      
-      let result = `content://${authority}`;
-      
-      if (treeIdx !== -1) {
-        if (docIdx !== -1 && docIdx > treeIdx) {
-          // 格式: tree/[TREE_ID]/document/[DOC_ID]
-          const treeId = path.substring(treeIdx + treeToken.length, docIdx);
-          const docId = path.substring(docIdx + docToken.length);
-          result += `${treeToken}${encodeURIComponent(treeId)}${docToken}${encodeURIComponent(docId)}`;
-        } else {
-          // 格式: tree/[TREE_ID]
-          const treeId = path.substring(treeIdx + treeToken.length);
-          result += `${treeToken}${encodeURIComponent(treeId)}`;
-        }
-      } else if (docIdx !== -1) {
-        // 格式: document/[DOC_ID]
-        const docId = path.substring(docIdx + docToken.length);
-        result += `${docToken}${encodeURIComponent(docId)}`;
-      } else {
-        return uri;
-      }
-      
-      return result;
-    } catch (e) {
-      console.error('[SearchEngine] [DEBUG] URI Normalization failed:', e);
-      return uri;
     }
   }
 
@@ -417,27 +368,7 @@ export class SearchEngine {
 
   /** 从 SAF URI 提取文件名 */
   private extractFileName(uri: string): string {
-    // SAF URI 格式: content://com.android.externalstorage.documents/tree/primary%3ADocuments
-    // 或: content://com.android.externalstorage.documents/document/primary%3ADocuments%2Ftest.txt
-    try {
-      const decoded = decodeURIComponent(uri);
-      const parts = decoded.split('/');
-      // 尝试找到最后一个有意义部分
-      for (let i = parts.length - 1; i >= 0; i--) {
-        const part = parts[i];
-        if (part && part !== 'tree' && part !== 'document' && !part.startsWith('com.')) {
-          // 在解码后的字符串中提取 : 后面的部分 (primary:Documents -> Documents)
-          const colonIndex = part.lastIndexOf(':');
-          if (colonIndex >= 0) {
-            return part.slice(colonIndex + 1);
-          }
-          return part;
-        }
-      }
-      return uri.split('/').pop() || uri;
-    } catch {
-      return uri.split('/').pop() || uri;
-    }
+    return getSafDisplayName(uri);
   }
 
   /** 在单个文件中搜索 */
@@ -544,7 +475,7 @@ export class SearchEngine {
         
         try {
           // 这里必须使用原始或重新编码的 URI，避免 isDirectory 判断失败
-          const normalizedUri = this.normalizeAndEncodeSafUri(entryUri);
+          const normalizedUri = normalizeAndEncodeSafUri(entryUri);
           const isDir = await this.isDirectory(normalizedUri);
           const name = this.extractFileName(entryUri);
           

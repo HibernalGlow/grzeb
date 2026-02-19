@@ -4,6 +4,7 @@ import { View, FlatList, ActivityIndicator, Alert, Dimensions } from 'react-nati
 import { Text } from '@/components/ui/text';
 import { WebView } from 'react-native-webview';
 import * as FileSystem from 'expo-file-system/legacy';
+import { normalizeAndEncodeSafUri } from '@/lib/utils/saf';
 
 /**
  * 极简文件 & 电子书查看器
@@ -40,34 +41,7 @@ export default function ViewerScreen() {
         let contentText = '';
         if (uri.startsWith('content://')) {
           // Expo Router decodes params, but SAF API needs correctly encoded IDs
-          const decoded = decodeURIComponent(uri);
-          const match = decoded.match(/^content:\/\/([^/]+)(\/.+)$/);
-          let fixedUri = uri;
-          
-          if (match) {
-            const authority = match[1];
-            const path = match[2];
-            const treeToken = '/tree/';
-            const docToken = '/document/';
-            const treeIdx = path.indexOf(treeToken);
-            const docIdx = path.indexOf(docToken);
-            
-            fixedUri = `content://${authority}`;
-            if (treeIdx !== -1) {
-              if (docIdx !== -1 && docIdx > treeIdx) {
-                const treeId = path.substring(treeIdx + treeToken.length, docIdx);
-                const docId = path.substring(docIdx + docToken.length);
-                fixedUri += `${treeToken}${encodeURIComponent(treeId)}${docToken}${encodeURIComponent(docId)}`;
-              } else {
-                const treeId = path.substring(treeIdx + treeToken.length);
-                fixedUri += `${treeToken}${encodeURIComponent(treeId)}`;
-              }
-            } else if (docIdx !== -1) {
-              const docId = path.substring(docIdx + docToken.length);
-              fixedUri += `${docToken}${encodeURIComponent(docId)}`;
-            }
-          }
-
+          const fixedUri = normalizeAndEncodeSafUri(uri);
           console.log('[Viewer] [DEBUG] Reading SAF URI:', fixedUri);
           contentText = await FileSystem.StorageAccessFramework.readAsStringAsync(fixedUri);
         } else {

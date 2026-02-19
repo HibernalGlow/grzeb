@@ -24,6 +24,7 @@ import {
 } from 'react-native';
 import { Stack, useRouter } from 'expo-router';
 import * as FileSystem from 'expo-file-system/legacy';
+import { getSafDisplayName } from '@/lib/utils/saf';
 
 // SAF 别名
 const SAF = FileSystem.StorageAccessFramework;
@@ -211,10 +212,10 @@ export default function SearchScreen() {
             >
               <Icon as={FolderOpen} className="size-4 text-muted-foreground" />
               <Text 
-                className="flex-1 text-sm text-muted-foreground" 
+                className="flex-1 text-sm text-foreground" 
                 numberOfLines={1}
               >
-                {selectedDir || '点击选择搜索目录...'}
+                {selectedDir ? getSafDisplayName(selectedDir) : '点击选择搜索目录...'}
               </Text>
               {selectedDir && (
                 <Pressable onPress={() => setSelectedDir(null)}>
