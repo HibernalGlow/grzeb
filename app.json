@@ -10,8 +10,9 @@
     "newArchEnabled": true,
     "extra": {
       "eas": {
-        "projectId": "2e6e0d34-d57a-4beb-9861-b7e84db4aac4"
-      }
+        "projectId": "badb1e61-2f37-48f1-80c1-460bde92c444"
+      },
+      "router": {}
     },
     "splash": {
       "image": "./assets/images/splash.png",
@@ -42,6 +43,7 @@
     ],
     "experiments": {
       "typedRoutes": true
-    }
+    },
+    "owner": "hibernalglow"
   }
 }
