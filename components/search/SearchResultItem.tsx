@@ -33,8 +33,10 @@ function HighlightedText({
   previewStartLine: number;
   indexInLine: number;
 }) {
-  // 按行分割
+  // 按行分割并过滤末尾空行
   const lines = text.split('\n');
+  if (lines.length > 1 && lines[lines.length - 1] === '') lines.pop();
+
   const safeStartLine = typeof previewStartLine === 'number' ? previewStartLine : 0;
   
   const elements: React.ReactNode[] = [];
@@ -46,15 +48,9 @@ function HighlightedText({
     
     // 在匹配行中使用 indexInLine 直接高亮
     if (isMatchLine && typeof indexInLine === 'number') {
-      // 如果行被截断了，需要调整 indexInLine
-      // 注意：目前的 extractContext 逻辑中，如果行被截断，
-      // match 会居中显示，原来的 indexInLine 就不再适用。
-      // 为简单起见，如果截断包含 "..."，我们重新寻找索引。
-      
       let highlightStart = indexInLine;
       let highlightEnd = indexInLine + matchText.length;
       
-      // 检测是否为截断行 (包含 '...')
       if (line.includes('...')) {
         const lowerLine = line.toLowerCase();
         const lowerMatch = matchText.toLowerCase();
@@ -70,11 +66,15 @@ function HighlightedText({
       const after = line.slice(highlightEnd);
       
       elements.push(
-        <View key={i} className="flex-row flex-wrap py-0.5">
-          <Text className="text-xs text-muted-foreground">{`${currentAbsoluteLine + 1}: `}</Text>
-          <Text className="text-xs text-foreground" numberOfLines={1}>{before}</Text>
-          <Text className="text-xs bg-yellow-500/30 text-yellow-700 dark:text-yellow-300 font-semibold" numberOfLines={1}>{matched}</Text>
-          <Text className="text-xs text-foreground" numberOfLines={1}>{after}</Text>
+        <View key={i} className="flex-row items-start">
+          <Text className="text-xs text-muted-foreground font-mono w-10 text-right pr-2 leading-5">
+            {`${currentAbsoluteLine + 1}`}
+          </Text>
+          <Text className="text-xs flex-1 leading-5">
+            <Text className="text-foreground">{before}</Text>
+            <Text className="bg-yellow-500/30 text-yellow-700 dark:text-yellow-300 font-bold">{matched}</Text>
+            <Text className="text-foreground">{after}</Text>
+          </Text>
         </View>
       );
       continue;
@@ -82,13 +82,18 @@ function HighlightedText({
     
     // 普通行
     elements.push(
-      <Text key={i} className="text-xs text-muted-foreground py-0.5" numberOfLines={1}>
-        {`${currentAbsoluteLine + 1}: ${line}`}
-      </Text>
+      <View key={i} className="flex-row items-start">
+        <Text className="text-xs text-muted-foreground font-mono w-10 text-right pr-2 leading-5">
+          {`${currentAbsoluteLine + 1}`}
+        </Text>
+        <Text className="text-xs text-muted-foreground flex-1 leading-5">
+          {line}
+        </Text>
+      </View>
     );
   }
   
-  return <View className="gap-0.5">{elements}</View>;
+  return <View className="gap-0">{elements}</View>;
 }
 
 /** 单个匹配项预览 */

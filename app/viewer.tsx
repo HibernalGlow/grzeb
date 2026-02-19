@@ -92,34 +92,29 @@ export default function ViewerScreen() {
           // 关键性能与定位配置
           initialScrollIndex={initialIndex}
           initialNumToRender={50}
-          getItemLayout={(_, index) => ({
-            length: 30, // 稍微增加一点预估高度以匹配 text-base 的实际高度
-            offset: 30 * index,
-            index,
-          })}
           onScrollToIndexFailed={(info) => {
-            // 如果 initialScrollIndex 失败（通常是因为渲染太慢），在这里尝试补偿
-            const wait = new Promise(resolve => setTimeout(resolve, 100));
-            wait.then(() => {
-              listRef.current?.scrollToOffset({ 
-                offset: info.index * 30, 
-                animated: false 
-              });
-            });
+            // 如果 initialScrollIndex 失败，尝试平滑补偿
+            setTimeout(() => {
+              if (listRef.current) {
+                listRef.current.scrollToIndex({ index: info.index, animated: true, viewPosition: 0.5 });
+              }
+            }, 500);
           }}
           renderItem={({ item, index }) => {
             const isTarget = index === targetLine;
             return (
               <View 
-                className={`px-4 flex-row items-center ${isTarget ? 'bg-yellow-500/20' : ''}`}
-                style={{ height: 30 }}
+                className={`px-4 flex-row ${isTarget ? 'bg-yellow-500/20' : ''}`}
+                style={{ minHeight: 28, paddingVertical: 4 }}
               >
-                <Text className="text-[10px] text-muted-foreground w-10 text-right pr-2 select-none">
+                <Text 
+                  className="text-[10px] text-muted-foreground w-10 text-right pr-2 pt-1 select-none font-mono"
+                >
                   {index + 1}
                 </Text>
                 <Text 
                   className={`text-base flex-1 ${isTarget ? 'text-foreground font-medium' : 'text-muted-foreground'}`}
-                  numberOfLines={1}
+                  style={{ lineHeight: 22 }}
                 >
                   {item || ' '}
                 </Text>
