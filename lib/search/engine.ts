@@ -328,6 +328,7 @@ export class SearchEngine {
           charCount += lines[i].length + 1;
         }
 
+        const startLine = Math.max(0, lineNumber - this.options.contextLines);
         const preview = this.extractContext(
           content,
           lines,
@@ -342,6 +343,7 @@ export class SearchEngine {
           end: match.index + match[0].length,
           lineNumber,
           preview,
+          previewStartLine: startLine,
         });
 
         result.matchCount++;

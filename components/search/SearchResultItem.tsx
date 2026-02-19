@@ -22,24 +22,23 @@ interface SearchResultItemProps {
 function HighlightedText({ 
   text, 
   matchText, 
-  lineNumber 
+  lineNumber,
+  previewStartLine
 }: { 
   text: string; 
   matchText: string;
   lineNumber: number;
+  previewStartLine: number;
 }) {
   // 按行分割
   const lines = text.split('\n');
-  const contextLines = 2; // 上下文行数
-  
-  const startLine = Math.max(0, lineNumber - contextLines);
-  const endLine = Math.min(lines.length - 1, lineNumber + contextLines);
   
   const elements: React.ReactNode[] = [];
   
-  for (let i = startLine; i <= endLine; i++) {
+  for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
-    const isMatchLine = i === lineNumber;
+    const currentAbsoluteLine = previewStartLine + i;
+    const isMatchLine = currentAbsoluteLine === lineNumber;
     
     // 在匹配行中高亮关键词
     if (isMatchLine) {
@@ -54,7 +53,7 @@ function HighlightedText({
         
         elements.push(
           <View key={i} className="flex-row flex-wrap py-0.5">
-            <Text className="text-xs text-muted-foreground">{`${i + 1}: `}</Text>
+            <Text className="text-xs text-muted-foreground">{`${currentAbsoluteLine + 1}: `}</Text>
             <Text className="text-xs text-foreground" numberOfLines={1}>{before}</Text>
             <Text className="text-xs bg-yellow-500/30 text-yellow-700 dark:text-yellow-300 font-semibold" numberOfLines={1}>{matched}</Text>
             <Text className="text-xs text-foreground" numberOfLines={1}>{after}</Text>
@@ -64,10 +63,10 @@ function HighlightedText({
       }
     }
     
-    // 普通行（带行号）
+    // 普通行（带起始行号）
     elements.push(
       <Text key={i} className="text-xs text-muted-foreground py-0.5" numberOfLines={1}>
-        {`${i + 1}: ${line}`}
+        {`${currentAbsoluteLine + 1}: ${line}`}
       </Text>
     );
   }
@@ -90,6 +89,7 @@ function MatchPreview({
           text={match.preview} 
           matchText={match.matchText}
           lineNumber={match.lineNumber}
+          previewStartLine={match.previewStartLine}
         />
       </View>
     </Pressable>

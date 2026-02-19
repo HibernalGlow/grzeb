@@ -42,6 +42,8 @@ export interface SearchMatch {
   lineNumber: number;
   /** 预览文本（包含上下文） */
   preview: string;
+  /** 预览开始的行号（用于渲染定位） */
+  previewStartLine: number;
 }
 
 /** 文件搜索结果 */
