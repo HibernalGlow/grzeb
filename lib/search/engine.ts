@@ -173,12 +173,14 @@ export class SearchEngine {
     lines: string[], 
     matchStart: number, 
     matchEnd: number,
-    matchedLine: number
+    matchedLine: number,
+    contextLinesOverride?: number
   ): string {
     const { contextLines, maxPreviewLength } = this.options;
+    const effectiveContextLines = contextLinesOverride ?? contextLines;
     
-    const startLine = Math.max(0, matchedLine - contextLines);
-    const endLine = Math.min(lines.length - 1, matchedLine + contextLines);
+    const startLine = Math.max(0, matchedLine - effectiveContextLines);
+    const endLine = Math.min(lines.length - 1, matchedLine + effectiveContextLines);
     
     const contextParts: string[] = [];
     
@@ -342,13 +344,18 @@ export class SearchEngine {
           charCount += lines[i].length + 1;
         }
 
-        const startLine = Math.max(0, lineNumber - this.options.contextLines);
+        // 动态上下文：如果行太长 (>50字符)，则不显示上下文
+        const isLongLine = lines[lineNumber].length > 50;
+        const effectiveContextLines = isLongLine ? 0 : this.options.contextLines;
+
+        const startLine = Math.max(0, lineNumber - effectiveContextLines);
         const preview = this.extractContext(
           content,
           lines,
           match.index,
           match.index + match[0].length,
-          lineNumber
+          lineNumber,
+          effectiveContextLines
         );
 
         const indexInLine = this.findMatchPositionInLine(content, match.index, lineNumber, lines);
