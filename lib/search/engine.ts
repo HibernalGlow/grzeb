@@ -235,25 +235,37 @@ export class SearchEngine {
   /** 读取 EPUB 内容并提取文本（简易版） */
   private async readEpubContent(uri: string): Promise<string | null> {
     try {
-      console.log('[SearchEngine] [DEBUG] Extracting EPUB:', uri);
+      console.log('[SearchEngine] [DEBUG] Start extracting EPUB:', uri);
       
       const base64 = await FileSystem.readAsStringAsync(uri, { 
         encoding: FileSystem.EncodingType.Base64 
       });
+      console.log('[SearchEngine] [DEBUG] EPUB Base64 read, length:', base64.length);
+
       const zip = await JSZip.loadAsync(Buffer.from(base64, 'base64'));
+      console.log('[SearchEngine] [DEBUG] EPUB Zip loaded');
 
       // 1. 获取 OPF 路径
-      const containerXml = await zip.file('META-INF/container.xml')?.async('text');
-      if (!containerXml) return null;
-
+      const containerFile = zip.file('META-INF/container.xml');
+      if (!containerFile) {
+        console.log('[SearchEngine] [DEBUG] EPUB has no container.xml');
+        return null;
+      }
+      
+      const containerXml = await containerFile.async('text');
       const opfPathMatch = containerXml.match(/full-path="([^"]+)"/);
       const opfPath = opfPathMatch ? opfPathMatch[1] : 'OEBPS/content.opf';
       const rootDir = opfPath.includes('/') ? opfPath.substring(0, opfPath.lastIndexOf('/') + 1) : '';
+      console.log('[SearchEngine] [DEBUG] OPF path:', opfPath);
 
       // 2. 解析 OPF
-      const opfText = await zip.file(opfPath)?.async('text');
-      if (!opfText) return null;
+      const opfFile = zip.file(opfPath);
+      if (!opfFile) {
+        console.log('[SearchEngine] [DEBUG] OPF file not found:', opfPath);
+        return null;
+      }
 
+      const opfText = await opfFile.async('text');
       const itemMap: Record<string, string> = {};
       const itemRegex = /<item[^>]+id="([^"]+)"[^>]+href="([^"]+)"/g;
       let m;
@@ -269,15 +281,17 @@ export class SearchEngine {
           spine.push(itemMap[idref]);
         }
       }
+      console.log('[SearchEngine] [DEBUG] Spine length:', spine.length);
 
       // 3. 提取文本
       const textParts: string[] = [];
       for (const href of spine) {
-        // 解码 URL 编码的路径 (e.g. text/part01.xhtml)
+        if (this.isCancelled) break;
         const decodedHref = decodeURIComponent(href);
         const filePath = rootDir + decodedHref;
-        const html = await zip.file(filePath)?.async('text');
-        if (html) {
+        const file = zip.file(filePath);
+        if (file) {
+          const html = await file.async('text');
           const text = html
             .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
             .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '')
@@ -291,7 +305,7 @@ export class SearchEngine {
       console.log(`[SearchEngine] [DEBUG] EPUB extraction complete, length: ${textParts.length} parts`);
       return textParts.join('\n\n');
     } catch (error) {
-      console.error('[SearchEngine] [DEBUG] EPUB parse error:', error);
+      console.error('[SearchEngine] [DEBUG] EPUB processing failed:', error);
       return null;
     }
   }
@@ -433,71 +447,62 @@ export class SearchEngine {
     return result.matches.length > 0 ? result : null;
   }
 
-  /** 遍历目录 */
-  private async walkDirectory(
-    dirUri: string,
-    depth: number
-  ): Promise<void> {
+  /** 递归扫描目录 */
+  private async walkDirectory(uri: string, depth: number): Promise<void> {
     if (this.isCancelled || depth > this.options.maxDepth) {
-      console.log('[SearchEngine] Walk cancelled or max depth reached:', depth);
+      console.log(`[SearchEngine] [DEBUG] Skipping scan: cancelled=${this.isCancelled}, depth=${depth}`);
       return;
     }
 
-    console.log('[SearchEngine] Walking directory, depth:', depth);
+    console.log(`[SearchEngine] [DEBUG] Scanning directory: ${uri} (depth: ${depth})`);
     this.progress.currentDepth = depth;
+    this.callbacks.onProgress?.(this.progress);
 
     try {
-      const entries = await this.readDirectory(dirUri);
-      this.progress.pendingDirs = entries.length;
+      const entries = await this.readDirectory(uri);
+      this.progress.pendingDirs += entries.length;
+      this.callbacks.onProgress?.(this.progress);
 
       for (const entryUri of entries) {
         if (this.isCancelled) break;
-
-        const entryName = this.extractFileName(entryUri);
-        console.log('[SearchEngine] Processing:', entryName);
-
-        // 检查是否忽略
-        if (this.shouldIgnore(entryName)) {
-          console.log('[SearchEngine] Ignored:', entryName);
-          continue;
-        }
-
+        
         try {
           const isDir = await this.isDirectory(entryUri);
-          console.log('[SearchEngine] Is directory:', isDir);
+          const name = this.extractFileName(entryUri);
           
           if (isDir) {
-            await this.walkDirectory(entryUri, depth + 1);
-          } else if (this.isTextFile(entryName)) {
-            this.progress.currentFile = entryName;
-            this.progress.scannedFiles++;
-            
-            console.log('[SearchEngine] Searching in file:', entryName);
-            const result = await this.searchInFile(entryUri, entryName);
-            
-            if (result) {
-              this.results.push(result);
-              this.progress.totalMatches += result.matchCount;
-              console.log('[SearchEngine] Found matches:', result.matchCount);
-              
-              if (this.callbacks.onResult) {
-                this.callbacks.onResult(result);
+            if (!this.shouldIgnore(name)) {
+              await this.walkDirectory(entryUri, depth + 1);
+            }
+          } else {
+            if (this.isTextFile(name)) {
+              this.progress.scannedFiles++;
+              this.progress.currentFile = name;
+              if (this.callbacks.onProgress) {
+                this.callbacks.onProgress({ ...this.progress });
+              }
+
+              const result = await this.searchInFile(entryUri, name);
+              if (result) {
+                this.results.push(result);
+                this.progress.totalMatches += result.matchCount;
+                if (this.callbacks.onResult) {
+                  this.callbacks.onResult(result);
+                }
               }
             }
-
-            if (this.callbacks.onProgress) {
-              this.callbacks.onProgress({ ...this.progress });
-            }
-
-            // 让出事件循环
-            await new Promise(resolve => setTimeout(resolve, 10));
+          }
+          
+          // 给 UI 线程喘息机会
+          if (this.progress.scannedFiles % 5 === 0) {
+            await new Promise(resolve => setTimeout(resolve, 0));
           }
         } catch (error) {
-          console.error('[SearchEngine] Process entry error:', error);
+          console.error('[SearchEngine] [DEBUG] Entry processing failed:', entryUri, error);
         }
       }
     } catch (error) {
-      console.error('[SearchEngine] Walk directory error:', error);
+      console.error('[SearchEngine] [DEBUG] Walk directory failed:', uri, error);
     }
   }
 
@@ -508,12 +513,12 @@ export class SearchEngine {
     }
 
     if (!this.regex) {
-      console.log('[SearchEngine] No valid regex, aborting');
+      console.log('[SearchEngine] [DEBUG] No valid regex, aborting');
       return [];
     }
 
     if (!this.isAndroidSaf) {
-      console.log('[SearchEngine] Only SAF mode supported on Android');
+      console.log('[SearchEngine] [DEBUG] Only SAF mode supported on Android');
       return [];
     }
 
@@ -528,7 +533,7 @@ export class SearchEngine {
       isComplete: false,
     };
 
-    console.log('[SearchEngine] Starting search...');
+    console.log('[SearchEngine] [DEBUG] Starting search...');
 
     try {
       await this.walkDirectory(this.options.rootDir, 0);
