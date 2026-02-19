@@ -105,19 +105,26 @@ export async function extractEpubText(uri: string): Promise<string | null> {
           .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '')
           .replace(/<head[^>]*>[\s\S]*?<\/head>/gi, '');
 
-        // b. 将块级标签替换为换行符，确保内容不挤在一起
-        // 匹配常见块级标签：p, div, h1-h6, li, br, tr, section, article
-        const blockTags = /<\/?(p|div|h[1-6]|li|br|tr|section|article)[^>]*>/gi;
-        let text = html.replace(blockTags, '\n');
+        // b. 将块级标签替换为换行符
+        // 之前：直接替换为 \n 可能会导致内容中间夹杂过多 \n
+        // 现在：处理为有规律的换行，避免合并后产生过多空行
+        const blockTags = /<\/?(p|div|h[1-6]|li|tr|section|article)[^>]*>/gi;
+        let text = html.replace(blockTags, (tag) => {
+          return tag.startsWith('</') || tag.toLowerCase().startsWith('<br') ? '\n' : '';
+        });
 
         // c. 移除所有剩余标签
         text = text.replace(/<[^>]+>/g, ' ');
 
-        // d. 清理多余空白，但保留单换行
+        // d. 清理多余空白
+        // 处理逻辑：合并水平空白，将连续换行限制在最多两个
         text = text
-          .replace(/[ \t]+/g, ' ') // 合并空格和制表符
-          .replace(/\n\s*\n/g, '\n\n') // 多个空行合并为两个
-          .trim();
+          .replace(/[ \t]+/g, ' ') 
+          .replace(/\n\s*\n/g, '\n\n')
+          .split('\n')
+          .map(line => line.trim())
+          .filter(line => line.length > 0)
+          .join('\n');
 
         if (text) {
           textParts.push(text);
@@ -125,7 +132,8 @@ export async function extractEpubText(uri: string): Promise<string | null> {
       }
     }
 
-    console.log(`[EpubUtils] [DEBUG] Extraction complete: ${textParts.length} parts`);
+    console.log(`[EpubUtils] [DEBUG] Extraction complete: ${textParts.length} segments`);
+    // 最终各分段（章节/文件）之间用双换行隔开
     return textParts.join('\n\n');
   } catch (error) {
     console.error('[EpubUtils] [DEBUG] Extraction failed:', error);

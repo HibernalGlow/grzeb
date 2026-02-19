@@ -5,6 +5,7 @@ import { Text } from '@/components/ui/text';
 import * as FileSystem from 'expo-file-system/legacy';
 import { normalizeAndEncodeSafUri } from '@/lib/utils/saf';
 import { extractEpubText } from '@/lib/utils/epub';
+import { useSettings } from '@/lib/store/settings';
 
 /**
  * 极简文件 & 电子书查看器
@@ -15,7 +16,7 @@ export default function ViewerScreen() {
   const uri = encodedUri || '';
   const targetLine = React.useMemo(() => line ? parseInt(line, 10) : -1, [line]);
 
-  const [content, setContent] = React.useState<string | string[] | null>(null);
+  const [content, setContent] = React.useState<string[] | null>(null);
   const [loading, setLoading] = React.useState(true);
   const [fileType, setFileType] = React.useState<'text' | 'epub' | 'unknown'>('unknown');
 
@@ -31,41 +32,25 @@ export default function ViewerScreen() {
         const isSaf = uri.startsWith('content://');
         const normalizedUri = isSaf ? normalizeAndEncodeSafUri(uri) : uri;
 
+        let contentText = '';
         if (lowerUri.endsWith('.epub')) {
-          setFileType('text'); // Treat as text
-          console.log('[Viewer] [DEBUG] Extracting text from EPUB:', normalizedUri);
-          const epubText = await extractEpubText(normalizedUri);
-          if (epubText) {
-            setContent(epubText.split('\n'));
+          setFileType('epub');
+          const extracted = await extractEpubText(normalizedUri);
+          if (extracted) {
+            contentText = extracted;
           } else {
             throw new Error('EPUB 提取失败');
           }
-          setLoading(false);
-          return;
+        } else {
+          setFileType('text');
+          contentText = isSaf 
+            ? await FileSystem.StorageAccessFramework.readAsStringAsync(normalizedUri)
+            : await FileSystem.readAsStringAsync(normalizedUri);
         }
-
-        // 默认作为文本处理
-        setFileType('text');
-        
-        console.log('[Viewer] [DEBUG] Reading text file:', normalizedUri);
-        const contentText = isSaf 
-          ? await FileSystem.StorageAccessFramework.readAsStringAsync(normalizedUri)
-          : await FileSystem.readAsStringAsync(normalizedUri);
 
         const lines = contentText.split('\n');
         setContent(lines);
         setLoading(false);
-
-        // 延迟跳转到目标行
-        if (targetLine >= 0) {
-          setTimeout(() => {
-            listRef.current?.scrollToIndex({
-              index: targetLine,
-              animated: true,
-              viewPosition: 0.5,
-            });
-          }, 500);
-        }
       } catch (error) {
         console.error('Failed to load file:', error);
         Alert.alert('错误', '无法读取文件内容: ' + (error as Error).message);
@@ -74,7 +59,7 @@ export default function ViewerScreen() {
     };
 
     loadFile();
-  }, [uri, targetLine]);
+  }, [uri]);
 
   if (loading) {
     return (
@@ -85,42 +70,58 @@ export default function ViewerScreen() {
     );
   }
 
+  // 计算初始滚动位置。
+  // 注意：FlatList 的 initialScrollIndex 在渲染大型列表时非常高效，
+  // 但它要求必须提供 getItemLayout。
+  const initialIndex = targetLine >= 0 && content && targetLine < content.length ? targetLine : undefined;
+
   return (
     <View className="flex-1 bg-background">
       <Stack.Screen 
         options={{ 
           title: uri.split('/').pop() || '查看器',
-          headerShown: fileType === 'text',
+          headerShown: true,
         }} 
       />
       
-      {fileType === 'text' && Array.isArray(content) && (
+      {(fileType === 'text' || fileType === 'epub') && content && (
         <FlatList
           ref={listRef}
           data={content}
           keyExtractor={(_, index) => index.toString()}
+          // 关键性能与定位配置
+          initialScrollIndex={initialIndex}
           initialNumToRender={50}
-          maxToRenderPerBatch={50}
-          windowSize={10}
+          getItemLayout={(_, index) => ({
+            length: 30, // 稍微增加一点预估高度以匹配 text-base 的实际高度
+            offset: 30 * index,
+            index,
+          })}
           onScrollToIndexFailed={(info) => {
-            listRef.current?.scrollToOffset({ offset: info.averageItemLength * info.index, animated: true });
+            // 如果 initialScrollIndex 失败（通常是因为渲染太慢），在这里尝试补偿
+            const wait = new Promise(resolve => setTimeout(resolve, 100));
+            wait.then(() => {
+              listRef.current?.scrollToOffset({ 
+                offset: info.index * 30, 
+                animated: false 
+              });
+            });
           }}
           renderItem={({ item, index }) => {
             const isTarget = index === targetLine;
-            // 跳过空行显示或仅显示结构
-            if (!item.trim() && !isTarget) {
-              return <View style={{ height: 10 }} />;
-            }
-
             return (
               <View 
-                className={`px-4 py-1 flex-row ${isTarget ? 'bg-yellow-500/20' : ''}`}
+                className={`px-4 flex-row items-center ${isTarget ? 'bg-yellow-500/20' : ''}`}
+                style={{ height: 30 }}
               >
-                <Text className="text-[10px] text-muted-foreground w-10 text-right pr-2 select-none" style={{ marginTop: 4 }}>
+                <Text className="text-[10px] text-muted-foreground w-10 text-right pr-2 select-none">
                   {index + 1}
                 </Text>
-                <Text className={`text-base flex-1 ${isTarget ? 'text-foreground font-medium' : 'text-muted-foreground'}`}>
-                  {item}
+                <Text 
+                  className={`text-base flex-1 ${isTarget ? 'text-foreground font-medium' : 'text-muted-foreground'}`}
+                  numberOfLines={1}
+                >
+                  {item || ' '}
                 </Text>
               </View>
             );
