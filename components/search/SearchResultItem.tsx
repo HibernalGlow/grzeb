@@ -71,9 +71,9 @@ function HighlightedText({
             {`${currentAbsoluteLine + 1}`}
           </Text>
           <Text className="text-xs flex-1 leading-5">
-            <Text className="text-foreground">{before}</Text>
-            <Text className="bg-yellow-500/30 text-yellow-700 dark:text-yellow-300 font-bold">{matched}</Text>
-            <Text className="text-foreground">{after}</Text>
+            <Text className="text-xs leading-5 text-foreground">{before}</Text>
+            <Text className="text-xs leading-5 bg-yellow-500/30 text-yellow-700 dark:text-yellow-300 font-bold">{matched}</Text>
+            <Text className="text-xs leading-5 text-foreground">{after}</Text>
           </Text>
         </View>
       );
