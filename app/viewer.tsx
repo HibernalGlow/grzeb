@@ -102,25 +102,24 @@ export default function ViewerScreen() {
           initialNumToRender={50}
           maxToRenderPerBatch={50}
           windowSize={10}
-          getItemLayout={(_, index) => ({
-            length: 24, // 估算行高
-            offset: 24 * index,
-            index,
-          })}
           onScrollToIndexFailed={(info) => {
             listRef.current?.scrollToOffset({ offset: info.averageItemLength * info.index, animated: true });
           }}
           renderItem={({ item, index }) => {
             const isTarget = index === targetLine;
+            // 跳过空行显示或仅显示结构
+            if (!item.trim() && !isTarget) {
+              return <View style={{ height: 10 }} />;
+            }
+
             return (
               <View 
-                className={`px-4 py-0.5 flex-row ${isTarget ? 'bg-yellow-500/20' : ''}`}
-                style={{ height: 24 }}
+                className={`px-4 py-1 flex-row ${isTarget ? 'bg-yellow-500/20' : ''}`}
               >
-                <Text className="text-[10px] text-muted-foreground w-10 text-right pr-2 select-none" style={{ lineHeight: 20 }}>
+                <Text className="text-[10px] text-muted-foreground w-10 text-right pr-2 select-none" style={{ marginTop: 4 }}>
                   {index + 1}
                 </Text>
-                <Text className={`text-sm flex-1 ${isTarget ? 'text-foreground font-medium' : 'text-muted-foreground'}`} style={{ lineHeight: 20 }}>
+                <Text className={`text-base flex-1 ${isTarget ? 'text-foreground font-medium' : 'text-muted-foreground'}`}>
                   {item}
                 </Text>
               </View>

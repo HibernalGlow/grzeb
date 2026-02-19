@@ -42,7 +42,7 @@ export async function extractEpubText(uri: string): Promise<string | null> {
     const opfPath = opfPathMatch ? opfPathMatch[1] : 'OEBPS/content.opf';
     const rootDir = opfPath.includes('/') ? opfPath.substring(0, opfPath.lastIndexOf('/') + 1) : '';
 
-    // 4. 解析 OPF
+    // 4. 解析 OPF 获取 Manifest 和 Spine
     const opfFile = zip.file(opfPath);
     if (!opfFile) {
       console.log('[EpubUtils] [DEBUG] OPF file not found:', opfPath);
@@ -50,38 +50,78 @@ export async function extractEpubText(uri: string): Promise<string | null> {
     }
 
     const opfText = await opfFile.async('text');
-    const itemMap: Record<string, string> = {};
-    const itemRegex = /<item[^>]+id="([^"]+)"[^>]+href="([^"]+)"/g;
+    
+    // 建立 ID -> href 和 ID -> properties 的映射
+    const itemMap: Record<string, { href: string; props: string }> = {};
+    const itemRegex = /<item\s+[^>]*?id="([^"]+)"\s+[^>]*?href="([^"]+)"(?:[^>]*?properties="([^"]*)")?/g;
     let m;
     while ((m = itemRegex.exec(opfText)) !== null) {
-      itemMap[m[1]] = m[2];
+      itemMap[m[1]] = { href: m[2], props: m[3] || '' };
     }
 
+    // 解析 Spine 并过滤导航/冗余文件
     const spine: string[] = [];
-    const itemRefRegex = /<itemref[^>]+idref="([^"]+)"/g;
+    const itemRefRegex = /<itemref\s+[^>]*?idref="([^"]+)"/g;
     while ((m = itemRefRegex.exec(opfText)) !== null) {
       const idref = m[1];
-      if (itemMap[idref]) {
-        spine.push(itemMap[idref]);
+      const item = itemMap[idref];
+      if (item) {
+        const lowerHref = item.href.toLowerCase();
+        const lowerProps = item.props.toLowerCase();
+        
+        // 过滤条件：
+        // 1. properties 包含 nav
+        // 2. 名字包含常见的目录/封面/样式关键字
+        // 3. 后缀不是 html/xhtml (有些 mobi 转 epub 会带奇怪文件)
+        if (
+          lowerProps.includes('nav') || 
+          lowerHref.includes('nav.') || 
+          lowerHref.includes('toc.') || 
+          lowerHref.includes('content.opf') ||
+          lowerHref.includes('cover') ||
+          lowerHref.includes('titlepage') ||
+          (!lowerHref.endsWith('.html') && !lowerHref.endsWith('.xhtml') && !lowerHref.endsWith('.htm'))
+        ) {
+          console.log('[EpubUtils] [DEBUG] Skipping non-content file:', item.href);
+          continue;
+        }
+        spine.push(item.href);
       }
     }
-    console.log('[EpubUtils] [DEBUG] Spine length:', spine.length);
+    console.log('[EpubUtils] [DEBUG] Final spine length:', spine.length);
 
-    // 5. 提取并清理文本
+    // 6. 提取并清理文本
     const textParts: string[] = [];
     for (const href of spine) {
       const decodedHref = decodeURIComponent(href);
       const filePath = rootDir + decodedHref;
       const file = zip.file(filePath);
       if (file) {
-        const html = await file.async('text');
-        const text = html
+        let html = await file.async('text');
+        
+        // a. 移除不可见标签
+        html = html
           .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
           .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '')
-          .replace(/<[^>]+>/g, ' ')
-          .replace(/\s+/g, ' ')
+          .replace(/<head[^>]*>[\s\S]*?<\/head>/gi, '');
+
+        // b. 将块级标签替换为换行符，确保内容不挤在一起
+        // 匹配常见块级标签：p, div, h1-h6, li, br, tr, section, article
+        const blockTags = /<\/?(p|div|h[1-6]|li|br|tr|section|article)[^>]*>/gi;
+        let text = html.replace(blockTags, '\n');
+
+        // c. 移除所有剩余标签
+        text = text.replace(/<[^>]+>/g, ' ');
+
+        // d. 清理多余空白，但保留单换行
+        text = text
+          .replace(/[ \t]+/g, ' ') // 合并空格和制表符
+          .replace(/\n\s*\n/g, '\n\n') // 多个空行合并为两个
           .trim();
-        textParts.push(text);
+
+        if (text) {
+          textParts.push(text);
+        }
       }
     }
 
