@@ -1,0 +1,25 @@
+# https://taskfile.dev
+
+version: '3'
+
+vars:
+  PROJECT_DIR: .
+
+tasks:
+  default:
+    desc: Show current app versions
+    cmds:
+      - task: version:show
+  version:show:
+    desc: Show versions in package.json
+    dir: '{{.PROJECT_DIR}}'
+    cmds:
+      - node scripts/version.js show
+
+  v:
+    desc: Set version in package.json and app.json
+    dir: '{{.PROJECT_DIR}}'
+    vars:
+      VERSION_ARG: '{{.CLI_ARGS | default .VERSION}}'
+    cmds:
+      - node scripts/version.js set {{.VERSION_ARG}}
