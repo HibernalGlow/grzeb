@@ -6,9 +6,6 @@
 
 import * as FileSystem from 'expo-file-system/legacy';
 import { Platform } from 'react-native';
-
-// 从 legacy 模块获取 StorageAccessFramework
-const SAF = FileSystem.StorageAccessFramework;
 import { 
   SearchOptions, 
   SearchMatch, 
@@ -18,6 +15,9 @@ import {
   SearchState,
   DEFAULT_SEARCH_OPTIONS 
 } from './types';
+
+// SAF 别名
+const SAF = FileSystem.StorageAccessFramework;
 
 /** 常见文本文件扩展名 */
 const TEXT_EXTENSIONS = new Set([
@@ -79,6 +79,13 @@ export class SearchEngine {
     this.parseIgnoredDirs();
     this.buildRegex();
     this.isAndroidSaf = Platform.OS === 'android' && isSafUri(this.options.rootDir);
+    
+    console.log('[SearchEngine] [DEBUG] Constructor:');
+    console.log('  - Platform:', Platform.OS);
+    console.log('  - Root dir:', this.options.rootDir);
+    console.log('  - Is SAF:', this.isAndroidSaf);
+    console.log('  - Query:', this.options.query);
+    console.log('  - Regex valid:', !!this.regex);
   }
 
   /** 解析忽略目录配置 */
@@ -180,9 +187,9 @@ export class SearchEngine {
           const offset = Math.floor((maxPreviewLength - (matchEnd - matchStart)) / 2);
           const subStart = Math.max(0, matchPosInLine - offset);
           const subEnd = Math.min(line.length, matchPosInLine + (matchEnd - matchStart) + offset);
-          line = (subStart > 0 ? '…' : '') + line.slice(subStart, subEnd) + (subEnd < line.length ? '…' : '');
+          line = (subStart > 0 ? '...' : '') + line.slice(subStart, subEnd) + (subEnd < line.length ? '...' : '');
         } else {
-          line = line.slice(0, maxPreviewLength) + (line.length > maxPreviewLength ? '…' : '');
+          line = line.slice(0, maxPreviewLength) + (line.length > maxPreviewLength ? '...' : '');
         }
       }
       
@@ -206,67 +213,70 @@ export class SearchEngine {
     return matchStart - pos;
   }
 
-  /** 读取文件内容（支持 SAF 和普通文件系统） */
+  /** 读取文件内容 */
   private async readFileContent(uri: string): Promise<string | null> {
     try {
       if (this.isAndroidSaf) {
-        // Android SAF 方式读取
-        return await SAF.readAsStringAsync(uri);
-      } else {
-        // 普通文件系统读取
         return await FileSystem.readAsStringAsync(uri);
       }
-    } catch {
+      return null;
+    } catch (error) {
+      console.error('[SearchEngine] [DEBUG] Read file error:', error);
       return null;
     }
   }
 
-  /** 读取目录内容（支持 SAF 和普通文件系统） */
+  /** 读取目录内容 */
   private async readDirectory(uri: string): Promise<string[]> {
     try {
-      if (this.isAndroidSaf) {
-        // Android SAF 方式
-        return await SAF.readDirectoryAsync(uri);
-      } else {
-        // 普通文件系统
-        return await FileSystem.readDirectoryAsync(uri);
-      }
-    } catch {
+      console.log('[SearchEngine] [DEBUG] Reading directory URI:', uri);
+      // readDirectoryAsync 返回的是 full content:// URI 列表
+      const entries = await SAF.readDirectoryAsync(uri);
+      console.log('[SearchEngine] [DEBUG] Found entries:', entries.length);
+      return entries;
+    } catch (error) {
+      console.error('[SearchEngine] [DEBUG] Read directory error:', error);
       return [];
     }
   }
 
-  /** 获取文件信息 */
-  private async getFileInfo(uri: string): Promise<{ exists: boolean; isDirectory: boolean; size?: number }> {
+  /** 检查 URI 是否为目录 */
+  private async isDirectory(uri: string): Promise<boolean> {
     try {
-      if (this.isAndroidSaf) {
-        // SAF 没有 getInfoAsync，需要通过尝试读取来判断
-        // 先尝试作为目录读取
-        try {
-          await SAF.readDirectoryAsync(uri);
-          return { exists: true, isDirectory: true };
-        } catch {
-          // 不是目录，尝试作为文件
-          try {
-            const content = await SAF.readAsStringAsync(uri);
-            return { exists: true, isDirectory: false, size: content.length };
-          } catch {
-            return { exists: false, isDirectory: false };
-          }
-        }
-      } else {
-        const info = await FileSystem.getInfoAsync(uri);
-        if ('exists' in info) {
-          return { 
-            exists: info.exists, 
-            isDirectory: 'isDirectory' in info ? info.isDirectory : false,
-            size: 'size' in info ? info.size : undefined,
-          };
-        }
-        return { exists: false, isDirectory: false };
-      }
+      const info = await FileSystem.getInfoAsync(uri);
+      return info.isDirectory;
     } catch {
-      return { exists: false, isDirectory: false };
+      try {
+        await SAF.readDirectoryAsync(uri);
+        return true;
+      } catch {
+        return false;
+      }
+    }
+  }
+
+  /** 从 SAF URI 提取文件名 */
+  private extractFileName(uri: string): string {
+    // SAF URI 格式: content://com.android.externalstorage.documents/tree/primary%3ADocuments
+    // 或: content://com.android.externalstorage.documents/document/primary%3ADocuments%2Ftest.txt
+    try {
+      const decoded = decodeURIComponent(uri);
+      const parts = decoded.split('/');
+      // 尝试找到最后一个有意义部分
+      for (let i = parts.length - 1; i >= 0; i--) {
+        const part = parts[i];
+        if (part && part !== 'tree' && part !== 'document' && !part.startsWith('com.')) {
+          // 提取 %3A 后面的部分 (primary%3ADocuments -> Documents)
+          const colonIndex = part.lastIndexOf('%3A');
+          if (colonIndex >= 0) {
+            return part.slice(colonIndex + 3);
+          }
+          return part;
+        }
+      }
+      return uri.split('/').pop() || uri;
+    } catch {
+      return uri.split('/').pop() || uri;
     }
   }
 
@@ -288,16 +298,13 @@ export class SearchEngine {
     };
 
     try {
-      // 读取文件内容
       const content = await this.readFileContent(uri);
       if (!content) {
         return null;
       }
       
-      result.size = content.length;
       const lines = content.split('\n');
 
-      // 搜索匹配
       let match: RegExpExecArray | null;
       const seenPositions = new Set<number>();
 
@@ -343,70 +350,60 @@ export class SearchEngine {
           break;
         }
       }
-    } catch {
+    } catch (error) {
+      console.error('[SearchEngine] Search in file error:', error);
       return null;
     }
 
     return result.matches.length > 0 ? result : null;
   }
 
-  /** 构建 URI */
-  private buildUri(dirUri: string, entry: string): string {
-    if (this.isAndroidSaf) {
-      // Android SAF URI 格式
-      return dirUri.endsWith('/') ? dirUri + encodeURIComponent(entry) : dirUri + '/' + encodeURIComponent(entry);
-    } else {
-      return dirUri.endsWith('/') ? dirUri + entry : dirUri + '/' + entry;
-    }
-  }
-
   /** 遍历目录 */
   private async walkDirectory(
     dirUri: string,
-    depth: number,
-    rootLength: number
+    depth: number
   ): Promise<void> {
     if (this.isCancelled || depth > this.options.maxDepth) {
+      console.log('[SearchEngine] Walk cancelled or max depth reached:', depth);
       return;
     }
 
+    console.log('[SearchEngine] Walking directory, depth:', depth);
     this.progress.currentDepth = depth;
 
     try {
       const entries = await this.readDirectory(dirUri);
       this.progress.pendingDirs = entries.length;
 
-      for (const entry of entries) {
+      for (const entryUri of entries) {
         if (this.isCancelled) break;
 
-        // 解码 entry 名称（SAF 可能编码）
-        const entryName = decodeURIComponent(entry.split('/').pop() || entry);
-        const entryUri = this.buildUri(dirUri, entryName);
-        
-        // 计算相对路径
-        const relPath = this.isAndroidSaf 
-          ? entryName 
-          : entryUri.slice(rootLength);
+        const entryName = this.extractFileName(entryUri);
+        console.log('[SearchEngine] Processing:', entryName);
 
         // 检查是否忽略
         if (this.shouldIgnore(entryName)) {
+          console.log('[SearchEngine] Ignored:', entryName);
           continue;
         }
 
         try {
-          const info = await this.getFileInfo(entryUri);
+          const isDir = await this.isDirectory(entryUri);
+          console.log('[SearchEngine] Is directory:', isDir);
           
-          if (info.isDirectory) {
-            await this.walkDirectory(entryUri, depth + 1, rootLength);
-          } else if (info.exists && this.isTextFile(entryName)) {
-            this.progress.currentFile = relPath;
+          if (isDir) {
+            await this.walkDirectory(entryUri, depth + 1);
+          } else if (this.isTextFile(entryName)) {
+            this.progress.currentFile = entryName;
             this.progress.scannedFiles++;
             
-            const result = await this.searchInFile(entryUri, relPath);
+            console.log('[SearchEngine] Searching in file:', entryName);
+            const result = await this.searchInFile(entryUri, entryName);
             
             if (result) {
               this.results.push(result);
               this.progress.totalMatches += result.matchCount;
+              console.log('[SearchEngine] Found matches:', result.matchCount);
               
               if (this.callbacks.onResult) {
                 this.callbacks.onResult(result);
@@ -417,14 +414,15 @@ export class SearchEngine {
               this.callbacks.onProgress({ ...this.progress });
             }
 
-            await new Promise(resolve => setTimeout(resolve, 0));
+            // 让出事件循环
+            await new Promise(resolve => setTimeout(resolve, 10));
           }
-        } catch {
-          // 忽略单个条目的错误
+        } catch (error) {
+          console.error('[SearchEngine] Process entry error:', error);
         }
       }
-    } catch {
-      // 目录读取失败
+    } catch (error) {
+      console.error('[SearchEngine] Walk directory error:', error);
     }
   }
 
@@ -435,6 +433,12 @@ export class SearchEngine {
     }
 
     if (!this.regex) {
+      console.log('[SearchEngine] No valid regex, aborting');
+      return [];
+    }
+
+    if (!this.isAndroidSaf) {
+      console.log('[SearchEngine] Only SAF mode supported on Android');
       return [];
     }
 
@@ -449,12 +453,13 @@ export class SearchEngine {
       isComplete: false,
     };
 
-    const rootLength = this.options.rootDir.length + 1;
+    console.log('[SearchEngine] Starting search...');
 
     try {
-      await this.walkDirectory(this.options.rootDir, 0, rootLength);
+      await this.walkDirectory(this.options.rootDir, 0);
     } catch (error) {
       this.state = 'error';
+      console.error('[SearchEngine] Search error:', error);
       if (this.callbacks.onError) {
         this.callbacks.onError(error as Error);
       }
@@ -463,6 +468,7 @@ export class SearchEngine {
 
     this.state = this.isCancelled ? 'cancelled' : 'complete';
     this.progress.isComplete = true;
+    console.log('[SearchEngine] Search complete. Results:', this.results.length, 'Matches:', this.progress.totalMatches);
 
     if (this.callbacks.onProgress) {
       this.callbacks.onProgress({ ...this.progress });
@@ -477,6 +483,7 @@ export class SearchEngine {
 
   /** 取消搜索 */
   cancel(): void {
+    console.log('[SearchEngine] Cancelling search...');
     this.isCancelled = true;
     this.state = 'cancelled';
     this.progress.isComplete = true;

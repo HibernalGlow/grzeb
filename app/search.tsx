@@ -25,7 +25,7 @@ import {
 import { Stack } from 'expo-router';
 import * as FileSystem from 'expo-file-system/legacy';
 
-// StorageAccessFramework 命名空间
+// SAF 别名
 const SAF = FileSystem.StorageAccessFramework;
 
 /** 搜索选项状态 */
