@@ -25,7 +25,6 @@ import {
 import { Stack, useRouter } from 'expo-router';
 import * as FileSystem from 'expo-file-system/legacy';
 import { getSafDisplayName } from '@/lib/utils/saf';
-import { useSettings } from '@/lib/store/settings';
 
 // SAF 别名
 const SAF = FileSystem.StorageAccessFramework;
@@ -49,9 +48,6 @@ export default function SearchScreen() {
   const [progress, setProgress] = React.useState<SearchProgress | null>(null);
   const [showOptions, setShowOptions] = React.useState(false);
   
-  // 应用设置
-  const { settings, updateSettings } = useSettings();
-
   // 搜索选项
   const [searchOptions, setSearchOptions] = React.useState<SearchOptionsState>({
     isCaseSensitive: false,
@@ -293,26 +289,6 @@ export default function SearchScreen() {
                     setSearchOptions(prev => ({ ...prev, isOnlyFirstMatch: checked }))
                   }
                 />
-              </View>
-              
-              <Separator className="my-2" />
-              
-              <View className="flex-row items-center justify-between pt-1">
-                <Text className="text-sm text-foreground">EPUB 阅读模式</Text>
-                <View className="flex-row bg-muted rounded-md p-0.5">
-                  <Pressable 
-                    onPress={() => updateSettings({ epubMode: 'simple' })}
-                    className={`px-3 py-1 rounded-sm ${settings.epubMode === 'simple' ? 'bg-background shadow-sm' : ''}`}
-                  >
-                    <Text className={`text-xs ${settings.epubMode === 'simple' ? 'text-foreground font-medium' : 'text-muted-foreground'}`}>极简</Text>
-                  </Pressable>
-                  <Pressable 
-                    onPress={() => updateSettings({ epubMode: 'standard' })}
-                    className={`px-3 py-1 rounded-sm ${settings.epubMode === 'standard' ? 'bg-background shadow-sm' : ''}`}
-                  >
-                    <Text className={`text-xs ${settings.epubMode === 'standard' ? 'text-foreground font-medium' : 'text-muted-foreground'}`}>专业</Text>
-                  </Pressable>
-                </View>
               </View>
             </CollapsibleSection>
           </View>
