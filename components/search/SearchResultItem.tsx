@@ -11,6 +11,7 @@ import { ChevronDown, ChevronRight, FileText, Folder } from 'lucide-react-native
 import * as React from 'react';
 import { Pressable, ScrollView, View } from 'react-native';
 import type { FileSearchResult, SearchMatch } from '@/lib/search/types';
+import { ExternalOpenButton } from './ExternalOpenButton';
 
 interface SearchResultItemProps {
   result: FileSearchResult;
@@ -147,6 +148,14 @@ export function SearchResultItem({
               <Text className="text-sm font-medium text-foreground flex-1" numberOfLines={1}>
                 {result.relPath}
               </Text>
+              
+              {/* 外部打开按钮 */}
+              <ExternalOpenButton 
+                uri={result.uri} 
+                filename={result.relPath.split('/').pop()} 
+                className="p-1"
+              />
+
               {matchCount > 0 && (
                 <View className="bg-primary/10 px-2 py-0.5 rounded-full">
                   <Text className="text-xs text-primary font-medium">

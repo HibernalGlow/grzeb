@@ -1,3 +1,5 @@
+import * as FileSystem from 'expo-file-system/legacy';
+
 /**
  * Utility functions for Android Storage Access Framework (SAF) URIs
  */
@@ -91,5 +93,41 @@ export function getSafDisplayName(uri: string): string {
     return decodeURIComponent(lastPart);
   } catch {
     return uri.split('/').pop() || uri;
+  }
+}
+/**
+ * Copies a SAF URI file to a temporary cache location.
+ * External apps often cannot access content:// URIs directly without persisted permissions.
+ */
+export async function copySafToCache(uri: string, filename?: string): Promise<string | null> {
+  if (!uri.startsWith('content://')) return uri;
+  
+  try {
+    const name = filename || getSafDisplayName(uri);
+    const cacheDir = `${FileSystem.cacheDirectory}external_open/`;
+    
+    // Ensure directory exists
+    const dirInfo = await FileSystem.getInfoAsync(cacheDir);
+    if (!dirInfo.exists) {
+      await FileSystem.makeDirectoryAsync(cacheDir, { intermediates: true });
+    }
+    
+    const targetPath = `${cacheDir}${name}`;
+    
+    console.log('[SAF Utils] Copying to cache:', targetPath);
+    
+    // Use SAF to read and write to cache
+    const base64 = await FileSystem.StorageAccessFramework.readAsStringAsync(uri, {
+      encoding: FileSystem.EncodingType.Base64
+    });
+    
+    await FileSystem.writeAsStringAsync(targetPath, base64, {
+      encoding: FileSystem.EncodingType.Base64
+    });
+    
+    return targetPath;
+  } catch (error) {
+    console.error('[SAF Utils] Failed to copy to cache:', error);
+    return null;
   }
 }
