@@ -8,6 +8,11 @@
     "scheme": "grzeb",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
+    "extra": {
+      "eas": {
+        "projectId": "2e6e0d34-d57a-4beb-9861-b7e84db4aac4"
+      }
+    },
     "splash": {
       "image": "./assets/images/splash.png",
       "resizeMode": "contain",
