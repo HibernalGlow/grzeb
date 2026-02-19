@@ -6,6 +6,8 @@
 
 import * as FileSystem from 'expo-file-system/legacy';
 import { Platform } from 'react-native';
+import JSZip from 'jszip';
+import { Buffer } from 'buffer';
 import { 
   SearchOptions, 
   SearchMatch, 
@@ -216,12 +218,80 @@ export class SearchEngine {
   /** 读取文件内容 */
   private async readFileContent(uri: string): Promise<string | null> {
     try {
+      if (uri.toLowerCase().endsWith('.epub')) {
+        return await this.readEpubContent(uri);
+      }
+
       if (this.isAndroidSaf) {
         return await FileSystem.readAsStringAsync(uri);
       }
       return null;
     } catch (error) {
       console.error('[SearchEngine] [DEBUG] Read file error:', error);
+      return null;
+    }
+  }
+
+  /** 读取 EPUB 内容并提取文本（简易版） */
+  private async readEpubContent(uri: string): Promise<string | null> {
+    try {
+      console.log('[SearchEngine] [DEBUG] Extracting EPUB:', uri);
+      
+      const base64 = await FileSystem.readAsStringAsync(uri, { 
+        encoding: FileSystem.EncodingType.Base64 
+      });
+      const zip = await JSZip.loadAsync(Buffer.from(base64, 'base64'));
+
+      // 1. 获取 OPF 路径
+      const containerXml = await zip.file('META-INF/container.xml')?.async('text');
+      if (!containerXml) return null;
+
+      const opfPathMatch = containerXml.match(/full-path="([^"]+)"/);
+      const opfPath = opfPathMatch ? opfPathMatch[1] : 'OEBPS/content.opf';
+      const rootDir = opfPath.includes('/') ? opfPath.substring(0, opfPath.lastIndexOf('/') + 1) : '';
+
+      // 2. 解析 OPF
+      const opfText = await zip.file(opfPath)?.async('text');
+      if (!opfText) return null;
+
+      const itemMap: Record<string, string> = {};
+      const itemRegex = /<item[^>]+id="([^"]+)"[^>]+href="([^"]+)"/g;
+      let m;
+      while ((m = itemRegex.exec(opfText)) !== null) {
+        itemMap[m[1]] = m[2];
+      }
+
+      const spine: string[] = [];
+      const itemRefRegex = /<itemref[^>]+idref="([^"]+)"/g;
+      while ((m = itemRefRegex.exec(opfText)) !== null) {
+        const idref = m[1];
+        if (itemMap[idref]) {
+          spine.push(itemMap[idref]);
+        }
+      }
+
+      // 3. 提取文本
+      const textParts: string[] = [];
+      for (const href of spine) {
+        // 解码 URL 编码的路径 (e.g. text/part01.xhtml)
+        const decodedHref = decodeURIComponent(href);
+        const filePath = rootDir + decodedHref;
+        const html = await zip.file(filePath)?.async('text');
+        if (html) {
+          const text = html
+            .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
+            .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '')
+            .replace(/<[^>]+>/g, ' ')
+            .replace(/\s+/g, ' ')
+            .trim();
+          textParts.push(text);
+        }
+      }
+
+      console.log(`[SearchEngine] [DEBUG] EPUB extraction complete, length: ${textParts.length} parts`);
+      return textParts.join('\n\n');
+    } catch (error) {
+      console.error('[SearchEngine] [DEBUG] EPUB parse error:', error);
       return null;
     }
   }

@@ -172,6 +172,7 @@ export default function SearchScreen() {
       params: {
         uri: encodeURIComponent(result.uri),
         line: match?.lineNumber?.toString() || '-1',
+        query: query.trim(),
       },
     });
   };

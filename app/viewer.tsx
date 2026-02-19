@@ -9,7 +9,7 @@ import * as FileSystem from 'expo-file-system/legacy';
  * 极简文件 & 电子书查看器
  */
 export default function ViewerScreen() {
-  const { uri: encodedUri, line } = useLocalSearchParams<{ uri: string; line?: string }>();
+  const { uri: encodedUri, line, query } = useLocalSearchParams<{ uri: string; line?: string; query?: string }>();
   const uri = React.useMemo(() => encodedUri ? decodeURIComponent(encodedUri) : '', [encodedUri]);
   const targetLine = React.useMemo(() => line ? parseInt(line, 10) : -1, [line]);
 
@@ -74,7 +74,7 @@ export default function ViewerScreen() {
       <Stack.Screen 
         options={{ 
           title: uri.split('/').pop() || '查看器',
-          headerShown: fileType === 'text', // EPUB 可能需要自己的全屏逻辑
+          headerShown: fileType === 'text',
         }} 
       />
       
@@ -92,7 +92,6 @@ export default function ViewerScreen() {
             index,
           })}
           onScrollToIndexFailed={(info) => {
-            // 如果跳转失败（可能还没加载），尝试滚动到底部或忽略
             listRef.current?.scrollToOffset({ offset: info.averageItemLength * info.index, animated: true });
           }}
           renderItem={({ item, index }) => {
@@ -115,7 +114,7 @@ export default function ViewerScreen() {
       )}
 
       {fileType === 'epub' && (
-        <EpubViewer uri={uri} />
+        <EpubViewer uri={uri} initialQuery={query} />
       )}
 
       {fileType === 'unknown' && (
@@ -129,11 +128,8 @@ export default function ViewerScreen() {
 
 /**
  * 简易 EPUB 阅读器组件
- * 使用 WebView + epub.js (CDN)
  */
-function EpubViewer({ uri }: { uri: string }) {
-  // 注意：在打包应用中最好将 epub.js 资源内置
-  // 这里先使用临时方案通过 WebView 加载
+function EpubViewer({ uri, initialQuery }: { uri: string; initialQuery?: string }) {
   const html = `
     <!DOCTYPE html>
     <html>
@@ -141,7 +137,7 @@ function EpubViewer({ uri }: { uri: string }) {
       <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
       <script src="https://cdnjs.cloudflare.com/ajax/libs/epub.js/0.3.88/epub.min.js"></script>
       <style>
-        body { margin: 0; padding: 0; background: transparent; overflow: hidden; }
+        body { margin: 0; padding: 0; background: transparent; overflow: hidden; font-family: sans-serif; }
         #viewer { width: 100vw; height: 100vh; }
       </style>
     </head>
@@ -155,7 +151,28 @@ function EpubViewer({ uri }: { uri: string }) {
           flow: "paginated",
           manager: "default"
         });
-        var display = rendition.display();
+
+        book.ready.then(function() {
+          // 如果有初始搜索词，尝试定位
+          if ("${initialQuery || ''}") {
+            return book.find("${initialQuery || ''}");
+          }
+        }).then(function(results) {
+          if (results && results.length > 0) {
+            rendition.display(results[0].cfi);
+            // 这里可以添加高亮逻辑
+            results.forEach(result => {
+              rendition.annotations.add("highlight", result.cfi, {}, (e) => {
+                console.log("annotation clicked", e);
+              }, "hl");
+            });
+          } else {
+            rendition.display();
+          }
+        }).catch(function(err) {
+          rendition.display();
+          console.error("Epub display error:", err);
+        });
 
         // 监听点击翻页
         document.addEventListener('click', function(e) {
@@ -164,7 +181,6 @@ function EpubViewer({ uri }: { uri: string }) {
           else if (e.clientX > width * 2 / 3) rendition.next();
         });
 
-        // 通信
         window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'ready' }));
       </script>
     </body>
