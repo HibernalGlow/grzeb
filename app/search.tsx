@@ -22,7 +22,7 @@ import {
   Platform,
   Alert,
 } from 'react-native';
-import { Stack } from 'expo-router';
+import { Stack, useRouter } from 'expo-router';
 import * as FileSystem from 'expo-file-system/legacy';
 
 // SAF 别名
@@ -37,6 +37,8 @@ interface SearchOptionsState {
 }
 
 export default function SearchScreen() {
+  const router = useRouter();
+
   // 搜索状态
   const [query, setQuery] = React.useState('');
   const [selectedDir, setSelectedDir] = React.useState<string | null>(null);
@@ -165,8 +167,13 @@ export default function SearchScreen() {
   
   /** 点击搜索结果 */
   const handleResultPress = (result: FileSearchResult, match?: SearchMatch) => {
-    // TODO: 导航到文件查看器，定位到匹配行
-    console.log('Open file:', result.uri, 'at line:', match?.lineNumber);
+    router.push({
+      pathname: '/viewer',
+      params: {
+        uri: encodeURIComponent(result.uri),
+        line: match?.lineNumber?.toString() || '-1',
+      },
+    });
   };
   
   /** 计算总匹配数 */
