@@ -218,37 +218,71 @@ export class SearchEngine {
   /** 读取文件内容 */
   private async readFileContent(uri: string): Promise<string | null> {
     try {
-      console.log('[SearchEngine] [DEBUG] Reading file:', uri.substring(0, 150));
+      const fixedUri = this.normalizeAndEncodeSafUri(uri);
+      console.log('[SearchEngine] [DEBUG] Reading file:', fixedUri.substring(0, 150));
       
-      // 修复错误的 URI 格式（混合了 tree 和 document）
-      let fixedUri = uri;
-      if (uri.includes('/tree/') && uri.includes('/document/')) {
-        // 错误格式: .../tree/.../document/...
-        // 正确格式: .../document/...
-        const documentIndex = uri.indexOf('/document/');
-        if (documentIndex > 0) {
-          fixedUri = 'content://com.android.externalstorage.documents' + uri.substring(documentIndex);
-          console.log('[SearchEngine] [DEBUG] Fixed URI:', fixedUri.substring(0, 150));
-        }
-      }
-      
-      // 确保 URI 使用 document 路径（文件必须是 document URI）
-      if (fixedUri.includes('/tree/') && !fixedUri.includes('/document/')) {
-        fixedUri = fixedUri.replace('/tree/', '/document/');
-        console.log('[SearchEngine] [DEBUG] Converted tree to document URI');
-      }
-      
-      if (uri.toLowerCase().endsWith('.epub')) {
+      if (fixedUri.toLowerCase().endsWith('.epub')) {
         return await this.readEpubContent(fixedUri);
       }
 
       // 使用 SAF 的 readAsStringAsync（通过 StorageAccessFramework 命名空间）
+      // 注意：fixedUri 必须是经过编码的规范化 URI
       const content = await SAF.readAsStringAsync(fixedUri);
       console.log('[SearchEngine] [DEBUG] Read success, length:', content.length);
       return content;
     } catch (error) {
       console.error('[SearchEngine] [DEBUG] Read file error:', error);
       return null;
+    }
+  }
+
+  /** 规范化并重新编码 SAF URI */
+  private normalizeAndEncodeSafUri(uri: string): string {
+    if (!uri || !uri.startsWith('content://')) return uri;
+    
+    try {
+      // 1. 先解码，拿到最原始的字符串结构（包含 / 和 :）
+      const decoded = decodeURIComponent(uri);
+      
+      // 2. 提取 Authority 和路径
+      const match = decoded.match(/^content:\/\/([^/]+)(\/.+)$/);
+      if (!match) return uri;
+      
+      const authority = match[1];
+      const path = match[2];
+      
+      // 3. 寻找 tree 和 document 标记，手动截取 ID
+      const treeToken = '/tree/';
+      const docToken = '/document/';
+      
+      const treeIdx = path.indexOf(treeToken);
+      const docIdx = path.indexOf(docToken);
+      
+      let result = `content://${authority}`;
+      
+      if (treeIdx !== -1) {
+        if (docIdx !== -1 && docIdx > treeIdx) {
+          // 格式: tree/[TREE_ID]/document/[DOC_ID]
+          const treeId = path.substring(treeIdx + treeToken.length, docIdx);
+          const docId = path.substring(docIdx + docToken.length);
+          result += `${treeToken}${encodeURIComponent(treeId)}${docToken}${encodeURIComponent(docId)}`;
+        } else {
+          // 格式: tree/[TREE_ID]
+          const treeId = path.substring(treeIdx + treeToken.length);
+          result += `${treeToken}${encodeURIComponent(treeId)}`;
+        }
+      } else if (docIdx !== -1) {
+        // 格式: document/[DOC_ID]
+        const docId = path.substring(docIdx + docToken.length);
+        result += `${docToken}${encodeURIComponent(docId)}`;
+      } else {
+        return uri;
+      }
+      
+      return result;
+    } catch (e) {
+      console.error('[SearchEngine] [DEBUG] URI Normalization failed:', e);
+      return uri;
     }
   }
 
@@ -509,12 +543,14 @@ export class SearchEngine {
         if (this.isCancelled) break;
         
         try {
-          const isDir = await this.isDirectory(entryUri);
+          // 这里必须使用原始或重新编码的 URI，避免 isDirectory 判断失败
+          const normalizedUri = this.normalizeAndEncodeSafUri(entryUri);
+          const isDir = await this.isDirectory(normalizedUri);
           const name = this.extractFileName(entryUri);
           
           if (isDir) {
             if (!this.shouldIgnore(name)) {
-              await this.walkDirectory(entryUri, depth + 1);
+              await this.walkDirectory(normalizedUri, depth + 1);
             }
           } else {
             if (this.isTextFile(name)) {
@@ -524,7 +560,8 @@ export class SearchEngine {
                 this.callbacks.onProgress({ ...this.progress });
               }
 
-              const result = await this.searchInFile(entryUri, name);
+              // 存入结果前进行规范化编码，确保 viewer 能直接读取
+              const result = await this.searchInFile(normalizedUri, name);
               if (result) {
                 this.results.push(result);
                 this.progress.totalMatches += result.matchCount;
