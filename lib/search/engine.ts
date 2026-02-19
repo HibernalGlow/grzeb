@@ -218,14 +218,34 @@ export class SearchEngine {
   /** 读取文件内容 */
   private async readFileContent(uri: string): Promise<string | null> {
     try {
+      console.log('[SearchEngine] [DEBUG] Reading file:', uri.substring(0, 150));
+      
+      // 修复错误的 URI 格式（混合了 tree 和 document）
+      let fixedUri = uri;
+      if (uri.includes('/tree/') && uri.includes('/document/')) {
+        // 错误格式: .../tree/.../document/...
+        // 正确格式: .../document/...
+        const documentIndex = uri.indexOf('/document/');
+        if (documentIndex > 0) {
+          fixedUri = 'content://com.android.externalstorage.documents' + uri.substring(documentIndex);
+          console.log('[SearchEngine] [DEBUG] Fixed URI:', fixedUri.substring(0, 150));
+        }
+      }
+      
+      // 确保 URI 使用 document 路径（文件必须是 document URI）
+      if (fixedUri.includes('/tree/') && !fixedUri.includes('/document/')) {
+        fixedUri = fixedUri.replace('/tree/', '/document/');
+        console.log('[SearchEngine] [DEBUG] Converted tree to document URI');
+      }
+      
       if (uri.toLowerCase().endsWith('.epub')) {
-        return await this.readEpubContent(uri);
+        return await this.readEpubContent(fixedUri);
       }
 
-      if (this.isAndroidSaf) {
-        return await FileSystem.readAsStringAsync(uri);
-      }
-      return null;
+      // 使用 SAF 的 readAsStringAsync（通过 StorageAccessFramework 命名空间）
+      const content = await SAF.readAsStringAsync(fixedUri);
+      console.log('[SearchEngine] [DEBUG] Read success, length:', content.length);
+      return content;
     } catch (error) {
       console.error('[SearchEngine] [DEBUG] Read file error:', error);
       return null;
@@ -237,7 +257,8 @@ export class SearchEngine {
     try {
       console.log('[SearchEngine] [DEBUG] Start extracting EPUB:', uri);
       
-      const base64 = await FileSystem.readAsStringAsync(uri, { 
+      // 使用 SAF API 读取 base64
+      const base64 = await SAF.readAsStringAsync(uri, { 
         encoding: FileSystem.EncodingType.Base64 
       });
       console.log('[SearchEngine] [DEBUG] EPUB Base64 read, length:', base64.length);
@@ -314,9 +335,14 @@ export class SearchEngine {
   private async readDirectory(uri: string): Promise<string[]> {
     try {
       console.log('[SearchEngine] [DEBUG] Reading directory URI:', uri);
-      // readDirectoryAsync 返回的是 full content:// URI 列表
       const entries = await SAF.readDirectoryAsync(uri);
       console.log('[SearchEngine] [DEBUG] Found entries:', entries.length);
+      
+      // 调试：打印完整条目 URI
+      entries.forEach((e, i) => {
+        console.log(`[SearchEngine] [DEBUG] Entry ${i}:`, e);
+      });
+      
       return entries;
     } catch (error) {
       console.error('[SearchEngine] [DEBUG] Read directory error:', error);
@@ -327,15 +353,31 @@ export class SearchEngine {
   /** 检查 URI 是否为目录 */
   private async isDirectory(uri: string): Promise<boolean> {
     try {
-      const info = await FileSystem.getInfoAsync(uri);
-      return info.isDirectory;
-    } catch {
+      // SAF URI: 检查是否包含 /tree/ 或 /document/
+      // tree URI 表示目录，document URI 表示文件
+      const decoded = decodeURIComponent(uri);
+      const hasTreeInPath = decoded.includes('/tree/');
+      const hasDocumentInPath = decoded.includes('/document/');
+      
+      // 如果 URI 明确是 document 类型，则是文件
+      if (hasDocumentInPath && !hasTreeInPath) {
+        return false;
+      }
+      
+      // 如果 URI 明确是 tree 类型，则是目录
+      if (hasTreeInPath && !hasDocumentInPath) {
+        return true;
+      }
+      
+      // 尝试读取目录来判断
       try {
         await SAF.readDirectoryAsync(uri);
         return true;
       } catch {
         return false;
       }
+    } catch {
+      return false;
     }
   }
 
@@ -350,10 +392,10 @@ export class SearchEngine {
       for (let i = parts.length - 1; i >= 0; i--) {
         const part = parts[i];
         if (part && part !== 'tree' && part !== 'document' && !part.startsWith('com.')) {
-          // 提取 %3A 后面的部分 (primary%3ADocuments -> Documents)
-          const colonIndex = part.lastIndexOf('%3A');
+          // 在解码后的字符串中提取 : 后面的部分 (primary:Documents -> Documents)
+          const colonIndex = part.lastIndexOf(':');
           if (colonIndex >= 0) {
-            return part.slice(colonIndex + 3);
+            return part.slice(colonIndex + 1);
           }
           return part;
         }

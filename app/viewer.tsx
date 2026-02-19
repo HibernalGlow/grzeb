@@ -10,7 +10,8 @@ import * as FileSystem from 'expo-file-system/legacy';
  */
 export default function ViewerScreen() {
   const { uri: encodedUri, line, query } = useLocalSearchParams<{ uri: string; line?: string; query?: string }>();
-  const uri = React.useMemo(() => encodedUri ? decodeURIComponent(encodedUri) : '', [encodedUri]);
+  // Expo Router 自动处理解码，无需手动 decodeURIComponent
+  const uri = encodedUri || '';
   const targetLine = React.useMemo(() => line ? parseInt(line, 10) : -1, [line]);
 
   const [content, setContent] = React.useState<string | string[] | null>(null);

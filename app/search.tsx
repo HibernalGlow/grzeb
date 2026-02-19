@@ -170,7 +170,7 @@ export default function SearchScreen() {
     router.push({
       pathname: '/viewer',
       params: {
-        uri: encodeURIComponent(result.uri),
+        uri: result.uri,
         line: match?.lineNumber?.toString() || '-1',
         query: query.trim(),
       },
