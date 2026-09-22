@@ -37,5 +37,10 @@ kotlin {
         commonMain.dependencies {
             implementation(libs.kotlinx.coroutines.core)
         }
+
+        // 编码判定是启发式的，靠肉眼验不了，钉几个真实的字节样本
+        jvmTest.dependencies {
+            implementation(kotlin("test"))
+        }
     }
 }
