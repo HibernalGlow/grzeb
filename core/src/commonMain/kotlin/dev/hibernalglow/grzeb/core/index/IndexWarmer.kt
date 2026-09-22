@@ -165,6 +165,22 @@ class IndexWarmer(
             }
         }
 
+        // 根目录本身也入库（parentUri 记 null）：结果树的面包屑要靠它拿到根的名字
+        val rootName = runCatching { fileSystem.displayName(treeUri) }.getOrNull()
+        store.putEntries(
+            treeUri,
+            listOf(
+                IndexedEntry(
+                    uri = treeUri,
+                    parentUri = null,
+                    name = rootName ?: treeUri,
+                    isDirectory = true,
+                    size = null,
+                    lastModified = null,
+                ),
+            ),
+        )
+
         walk(treeUri, 0)
 
         // 这轮没见到的条目 = 已经被删 / 改名的，连同正文一起清掉。
@@ -174,7 +190,7 @@ class IndexWarmer(
 
         store.markWarmed(
             treeUri = treeUri,
-            displayName = runCatching { fileSystem.displayName(treeUri) }.getOrNull(),
+            displayName = rootName,
             at = Clock.System.now().toEpochMilliseconds(),
         )
         onProgress(WarmProgress(isComplete = true, scannedFiles = scanned, indexedFiles = indexed, reusedFiles = reused))
