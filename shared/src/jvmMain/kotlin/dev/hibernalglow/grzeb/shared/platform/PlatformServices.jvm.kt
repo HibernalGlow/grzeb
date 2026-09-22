@@ -4,6 +4,10 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import dev.hibernalglow.grzeb.core.fs.GrzebFileSystem
 import dev.hibernalglow.grzeb.core.fs.JvmGrzebFileSystem
+import dev.hibernalglow.grzeb.core.index.IndexStore
+import dev.hibernalglow.grzeb.core.index.SqlDelightIndexStore
+import dev.hibernalglow.grzeb.core.index.createJvmIndexDriver
+import dev.hibernalglow.grzeb.core.index.defaultJvmIndexPath
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.swing.Swing
 import kotlinx.coroutines.withContext
@@ -32,6 +36,13 @@ private class JvmPlatformServices : PlatformServices {
     }
 
     override fun createFileSystem(treeUri: String?): GrzebFileSystem = JvmGrzebFileSystem()
+
+    /** 惰性开库：库落在 `~/.grzeb/index.db`。 */
+    private val index: IndexStore by lazy {
+        SqlDelightIndexStore.create(createJvmIndexDriver(defaultJvmIndexPath()))
+    }
+
+    override fun createIndexStore(): IndexStore = index
 
     override suspend fun openExternally(uri: String): Boolean = withContext(Dispatchers.IO) {
         runCatching {

@@ -12,6 +12,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalContext
 import dev.hibernalglow.grzeb.core.fs.AndroidGrzebFileSystem
 import dev.hibernalglow.grzeb.core.fs.GrzebFileSystem
+import dev.hibernalglow.grzeb.core.index.IndexStore
+import dev.hibernalglow.grzeb.core.index.SqlDelightIndexStore
+import dev.hibernalglow.grzeb.core.index.createAndroidIndexDriver
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -56,6 +59,11 @@ actual fun rememberPlatformServices(): PlatformServices {
 
             override fun createFileSystem(treeUri: String?): GrzebFileSystem =
                 AndroidGrzebFileSystem(context, treeUri)
+
+            /** 惰性开库：不预热就永远不建这个文件。 */
+            private val index by lazy { SqlDelightIndexStore.create(createAndroidIndexDriver(context)) }
+
+            override fun createIndexStore(): IndexStore = index
 
             override suspend fun openExternally(uri: String): Boolean = withContext(Dispatchers.IO) {
                 runCatching {

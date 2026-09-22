@@ -4,6 +4,8 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import dev.hibernalglow.grzeb.core.fs.GrzebFileSystem
 import dev.hibernalglow.grzeb.core.fs.UnsupportedGrzebFileSystem
+import dev.hibernalglow.grzeb.core.index.InMemoryIndexStore
+import dev.hibernalglow.grzeb.core.index.IndexStore
 
 /**
  * Web 侧：目录访问要接 File System Access API（showDirectoryPicker + 句柄持久化），
@@ -22,6 +24,9 @@ actual fun rememberPlatformServices(): PlatformServices = remember {
             UnsupportedGrzebFileSystem(WEB_REASON)
 
         override suspend fun openExternally(uri: String): Boolean = false
+
+        /** Web 端没有目录访问，索引也就只是会话内的内存缓存。 */
+        override fun createIndexStore(): IndexStore = InMemoryIndexStore()
     }
 }
 

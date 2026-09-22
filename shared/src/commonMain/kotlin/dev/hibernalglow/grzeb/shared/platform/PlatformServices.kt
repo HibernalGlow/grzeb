@@ -2,6 +2,7 @@ package dev.hibernalglow.grzeb.shared.platform
 
 import androidx.compose.runtime.Composable
 import dev.hibernalglow.grzeb.core.fs.GrzebFileSystem
+import dev.hibernalglow.grzeb.core.index.IndexStore
 
 /**
  * 平台能力入口。
@@ -23,6 +24,13 @@ interface PlatformServices {
 
     /** 交给系统默认程序打开；成功返回 true。 */
     suspend fun openExternally(uri: String): Boolean
+
+    /**
+     * 索引库（目录树快照 + 正文缓存）。Android / 桌面落盘，Web 只有内存实现。
+     *
+     * 只在真正要用的时候才去开库 —— 实现方应当把 driver 的创建做成惰性的。
+     */
+    fun createIndexStore(): IndexStore
 }
 
 @Composable
