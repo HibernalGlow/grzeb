@@ -25,6 +25,10 @@ actual fun rememberPlatformServices(): PlatformServices = remember {
 
         override suspend fun openExternally(uri: String): Boolean = false
 
+        override val isRevealSupported: Boolean = false
+
+        override suspend fun revealInFileManager(uri: String): Boolean = false
+
         /** Web 端没有目录访问，索引也就只是会话内的内存缓存。 */
         override fun createIndexStore(): IndexStore = InMemoryIndexStore()
     }

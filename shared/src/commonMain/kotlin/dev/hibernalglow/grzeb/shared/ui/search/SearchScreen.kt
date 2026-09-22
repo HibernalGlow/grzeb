@@ -4,17 +4,20 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.Button
@@ -28,39 +31,156 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import dev.hibernalglow.grzeb.core.fs.GrzebFileSystem
+import dev.hibernalglow.grzeb.core.index.IndexStore
+import dev.hibernalglow.grzeb.core.index.IndexedFileSystem
+import dev.hibernalglow.grzeb.core.search.FileSearchResult
 import dev.hibernalglow.grzeb.core.search.SearchProgress
 import dev.hibernalglow.grzeb.shared.platform.PlatformServices
+import dev.hibernalglow.grzeb.shared.ui.DefaultPaneWidth
 import dev.hibernalglow.grzeb.shared.ui.GrzebIcons
+import dev.hibernalglow.grzeb.shared.ui.MinListWidth
+import dev.hibernalglow.grzeb.shared.ui.MinPaneWidth
+import dev.hibernalglow.grzeb.shared.ui.PaneDividerWidth
+import dev.hibernalglow.grzeb.shared.ui.PaneResizeHandle
+import dev.hibernalglow.grzeb.shared.ui.detailPaneWidth
+import dev.hibernalglow.grzeb.shared.ui.maxContentWidth
+import dev.hibernalglow.grzeb.shared.ui.windowSizeClassOf
 import kotlinx.coroutines.launch
 
 /**
  * 检索页，对应 react 版 `app/search.tsx`。
  *
  * 自上而下：目录行 → 输入行 → 可折叠选项 → 分隔线 → 进度 / 统计 → 结果列表。
+ *
+ * 宽窗口按 M3 自适应分流（见 [dev.hibernalglow.grzeb.shared.ui.WindowSizeClass]）：
+ * 展开窗口里预览进右侧 supporting pane，紧凑 / 中等窗口里仍占满整屏；
+ * 单栏时正文限宽居中，不再整页拉伸。
  */
 @Composable
 fun SearchScreen(services: PlatformServices, modifier: Modifier = Modifier) {
     val scope = rememberCoroutineScope()
     val state = remember { SearchUiState() }
     // Android 的 tree uri 变了就要换实例（实例持有那次授权），桌面端则一直是同一个
-    val fileSystem = remember(state.directory) { services.createFileSystem(state.directory) }
+    val baseFileSystem = remember(state.directory) { services.createFileSystem(state.directory) }
+    // 检索走索引包装：预热完成后列目录、读正文都不再碰真实文件系统（见 core 的 IndexedFileSystem）
+    val indexStore = remember(services) { services.createIndexStore() }
+    val fileSystem = remember(baseFileSystem, indexStore) {
+        IndexedFileSystem(indexStore, state.directory.orEmpty(), baseFileSystem)
+    }
 
-    // 桌面端预填主目录；Android 未授权时 rootLocation() 为 null，保持"请先选择目录"
-    LaunchedEffect(fileSystem) {
+    // 回填上次用过的目录（索引库里记着）；没有记录再退回平台默认目录 ——
+    // 桌面是用户主目录，Android 未授权时为 null，保持"请先选择目录"
+    LaunchedEffect(baseFileSystem, indexStore) {
         if (state.directory == null) {
-            fileSystem.rootLocation()?.let { state.directory = it }
+            state.directory = indexStore.lastRoot()?.treeUri ?: baseFileSystem.rootLocation()
         }
     }
 
-    Column(modifier.fillMaxSize()) {
+    // 选中目录就后台预热（可取消、带进度）：目录项与正文先入库，之后的检索直接打索引。
+    // 预热读的是**没套索引的** baseFileSystem —— 套了索引的实例在预热完成前是空的。
+    LaunchedEffect(state.directory) {
+        if (state.directory != null) state.warm(scope, indexStore, baseFileSystem)
+    }
+
+    val openExternally: (FileSearchResult) -> Unit = { result ->
+        scope.launch { services.openExternally(result.uri) }
+    }
+
+    val reveal: (FileSearchResult) -> Unit = { result ->
+        scope.launch { services.revealInFileManager(result.uri) }
+    }
+
+    // 侧栏宽度存成 Float dp：Dp 是 value class，进不了 rememberSaveable
+    var paneWidthDp by rememberSaveable { mutableStateOf(DefaultPaneWidth.value) }
+
+    BoxWithConstraints(modifier = modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
+        val windowClass = windowSizeClassOf(maxWidth)
+        val paneWidth = windowClass.detailPaneWidth
+        val preview = state.preview
+
+        when {
+            preview != null && paneWidth != null -> {
+                // 侧栏宽度可拖：最窄 280dp，最宽不超过半屏且给列表留 360dp
+                val maxPane = minOf(maxWidth * 0.5f, maxWidth - MinListWidth - PaneDividerWidth)
+                    .coerceAtLeast(MinPaneWidth)
+                val pane = paneWidthDp.dp.coerceIn(MinPaneWidth, maxPane)
+                // 整组仍是"单栏上限 + 侧栏"再居中：拖手柄只改两侧比例，不动外边界
+                val shellWidth = minOf(
+                    maxWidth,
+                    (windowClass.maxContentWidth ?: maxWidth) + pane + PaneDividerWidth,
+                )
+                val listWidth = shellWidth - pane - PaneDividerWidth
+                Row(Modifier.fillMaxSize(), horizontalArrangement = Arrangement.Center) {
+                    SearchPane(
+                        state = state,
+                        services = services,
+                        fileSystem = fileSystem,
+                        indexStore = indexStore,
+                        modifier = Modifier.width(listWidth).fillMaxHeight(),
+                    )
+                    PaneResizeHandle(
+                        onDrag = { delta -> paneWidthDp = (paneWidthDp + delta.value).coerceIn(0f, 4000f) },
+                        onReset = { paneWidthDp = DefaultPaneWidth.value },
+                        modifier = Modifier.width(PaneDividerWidth).fillMaxHeight(),
+                    )
+                    FilePreviewPane(
+                        selection = preview,
+                        fileSystem = fileSystem,
+                        canReveal = services.isRevealSupported,
+                        onDismiss = { state.preview = null },
+                        onOpenExternally = openExternally,
+                        onReveal = reveal,
+                        modifier = Modifier.width(pane).fillMaxHeight(),
+                    )
+                }
+            }
+
+            preview != null -> FilePreviewPane(
+                selection = preview,
+                fileSystem = fileSystem,
+                canReveal = services.isRevealSupported,
+                onDismiss = { state.preview = null },
+                onOpenExternally = openExternally,
+                onReveal = reveal,
+                modifier = Modifier.widthIn(max = windowClass.maxContentWidth ?: maxWidth).fillMaxSize(),
+            )
+
+            else -> SearchPane(
+                state = state,
+                services = services,
+                fileSystem = fileSystem,
+                indexStore = indexStore,
+                modifier = Modifier.widthIn(max = windowClass.maxContentWidth ?: maxWidth).fillMaxSize(),
+            )
+        }
+    }
+}
+
+/** 检索正文：控件区 + 结果列表。紧凑时是整页，展开时是左侧列表栏。 */
+@Composable
+private fun SearchPane(
+    state: SearchUiState,
+    services: PlatformServices,
+    fileSystem: GrzebFileSystem,
+    indexStore: IndexStore,
+    modifier: Modifier = Modifier,
+) {
+    val scope = rememberCoroutineScope()
+
+    Column(modifier) {
         Column(
             modifier = Modifier.fillMaxWidth().padding(12.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp),
@@ -78,7 +198,7 @@ fun SearchScreen(services: PlatformServices, modifier: Modifier = Modifier) {
                 onQueryChange = { state.query = it },
                 isSearching = state.isSearching,
                 canSearch = state.canSearch,
-                onSearch = { state.search(scope, fileSystem) },
+                onSearch = { state.search(scope, fileSystem, indexStore) },
                 onCancel = state::cancel,
             )
 
@@ -92,6 +212,8 @@ fun SearchScreen(services: PlatformServices, modifier: Modifier = Modifier) {
         HorizontalDivider()
 
         state.progress?.let { ProgressArea(it) }
+
+        WarmIndicator(progress = state.warmProgress, status = state.indexStatus)
 
         if (state.results.isNotEmpty() && !state.isSearching) {
             ResultSummary(
@@ -110,11 +232,23 @@ fun SearchScreen(services: PlatformServices, modifier: Modifier = Modifier) {
             )
         }
 
-        SearchResultList(
-            results = state.results,
+        // 面包屑：整棵树的根 → 当前 scope。点哪一节就回到哪一层，等价于浏览器后退。
+        if (state.tree != null) {
+            ScopeBreadcrumb(
+                path = state.scopePath,
+                onNavigate = { segment -> state.drillInto(segment.uri, scope, indexStore) },
+            )
+        }
+
+        SearchResultTree(
+            node = state.tree,
             isLoading = state.isSearching,
             emptyText = if (state.hasSearched) "没有找到匹配的结果" else "选择目录并输入关键词后开始检索",
-            onOpen = { result -> scope.launch { services.openExternally(result.uri) } },
+            expanded = state.expanded,
+            selectedUri = state.preview?.file?.uri,
+            onToggleExpand = state::toggleExpanded,
+            onDrill = { uri -> state.drillInto(uri, scope, indexStore) },
+            onSelect = { file, match -> state.preview = PreviewSelection(file, match) },
             modifier = Modifier.weight(1f),
         )
     }

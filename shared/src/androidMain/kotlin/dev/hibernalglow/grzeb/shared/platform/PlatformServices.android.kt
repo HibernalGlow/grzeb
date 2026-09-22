@@ -79,6 +79,15 @@ actual fun rememberPlatformServices(): PlatformServices {
                     true
                 }.getOrDefault(false)
             }
+
+            /**
+             * SAF 没有"在文件管理器里选中某个文件"的意图：要自己从 document uri 反推父目录
+             * （`DocumentsContract.findDocumentPath` 还要 API 26+），跨 provider 不保证可用，
+             * 所以这里先声明不支持，UI 会直接不给这个入口。
+             */
+            override val isRevealSupported: Boolean = false
+
+            override suspend fun revealInFileManager(uri: String): Boolean = false
         }
     }
 }

@@ -1,5 +1,6 @@
 package dev.hibernalglow.grzeb.shared.ui.search
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -43,15 +44,16 @@ import dev.hibernalglow.grzeb.core.search.SearchMatch
 import dev.hibernalglow.grzeb.shared.ui.GrzebIcons
 
 /** 命中文本的底色，取自 react 版的 `bg-yellow-500/30`。 */
-private val HighlightColor = Color(0x4DEAB308)
+internal val HighlightColor = Color(0x4DEAB308)
 
-/** 结果列表，对应 react 版的 `SearchResultList`。 */
+/** 结果列表，对应 react 版的 `SearchResultList`。点中一处命中即选定它的预览。 */
 @Composable
 fun SearchResultList(
     results: List<FileSearchResult>,
     isLoading: Boolean,
     emptyText: String,
-    onOpen: (FileSearchResult) -> Unit,
+    selectedUri: String?,
+    onSelect: (FileSearchResult, SearchMatch) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     when {
@@ -62,14 +64,18 @@ fun SearchResultList(
             contentPadding = PaddingValues(start = 12.dp, end = 12.dp, top = 12.dp, bottom = 20.dp),
         ) {
             items(results) { result ->
-                SearchResultCard(result = result, onOpen = onOpen)
+                SearchResultCard(
+                    result = result,
+                    isSelected = result.uri == selectedUri,
+                    onSelect = onSelect,
+                )
             }
         }
     }
 }
 
 @Composable
-private fun CenteredHint(text: String, modifier: Modifier) {
+internal fun CenteredHint(text: String, modifier: Modifier) {
     Box(modifier = modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
         Text(
             text = text,
@@ -88,11 +94,22 @@ private fun CenteredHint(text: String, modifier: Modifier) {
  * 这里直接合并成一种状态）。
  */
 @Composable
-private fun SearchResultCard(result: FileSearchResult, onOpen: (FileSearchResult) -> Unit) {
+private fun SearchResultCard(
+    result: FileSearchResult,
+    isSelected: Boolean,
+    onSelect: (FileSearchResult, SearchMatch) -> Unit,
+) {
     val collapsible = result.matches.size > 1
     var isOpen by remember(result.uri) { mutableStateOf(result.matches.size <= 3) }
 
-    Card(modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp)) {
+    Card(
+        modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
+        border = if (isSelected) {
+            BorderStroke(1.dp, MaterialTheme.colorScheme.primary)
+        } else {
+            null
+        },
+    ) {
         Column {
             Row(
                 modifier = Modifier
@@ -134,7 +151,7 @@ private fun SearchResultCard(result: FileSearchResult, onOpen: (FileSearchResult
                     verticalArrangement = Arrangement.spacedBy(4.dp),
                 ) {
                     result.matches.forEach { match ->
-                        MatchPreview(match = match, onClick = { onOpen(result) })
+                        MatchPreview(match = match, onClick = { onSelect(result, match) })
                     }
                 }
             }
@@ -143,7 +160,7 @@ private fun SearchResultCard(result: FileSearchResult, onOpen: (FileSearchResult
 }
 
 @Composable
-private fun MatchCountBadge(count: Int) {
+internal fun MatchCountBadge(count: Int) {
     Box(
         modifier = Modifier
             .clip(CircleShape)
@@ -160,7 +177,7 @@ private fun MatchCountBadge(count: Int) {
 
 /** 单处命中：左侧一条主色竖线 + 等宽的预览文本。 */
 @Composable
-private fun MatchPreview(match: SearchMatch, onClick: () -> Unit) {
+internal fun MatchPreview(match: SearchMatch, onClick: () -> Unit) {
     val shape = MaterialTheme.shapes.small
     val accent = MaterialTheme.colorScheme.primary
     Box(

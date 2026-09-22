@@ -53,6 +53,25 @@ private class JvmPlatformServices : PlatformServices {
         }.getOrDefault(false)
     }
 
+    override val isRevealSupported: Boolean = true
+
+    override suspend fun revealInFileManager(uri: String): Boolean = withContext(Dispatchers.IO) {
+        runCatching {
+            val file = File(uri).absoluteFile
+            if (!file.exists()) return@runCatching false
+            // Desktop API 没有"在文件管理器里选中"这一项，只能按平台各调一次系统命令：
+            // macOS 的 `open -R`、Windows 的 `explorer /select,`（路径要整条给一个参数），
+            // Linux 没有通用的选中接口，退化为打开它所在的目录
+            val command = when {
+                isMacOs -> listOf("open", "-R", file.path)
+                isWindows -> listOf("explorer", "/select,${file.path}")
+                else -> listOf("xdg-open", file.parent ?: file.path)
+            }
+            ProcessBuilder(command).start()
+            true
+        }.getOrDefault(false)
+    }
+
     private fun pickWithNativeDialog(): String? {
         System.setProperty("apple.awt.fileDialogForDirectories", "true")
         val dialog = FileDialog(null as Frame?, "选择搜索目录", FileDialog.LOAD)
@@ -80,5 +99,6 @@ private class JvmPlatformServices : PlatformServices {
 
     private companion object {
         val isMacOs: Boolean = System.getProperty("os.name").orEmpty().startsWith("Mac")
+        val isWindows: Boolean = System.getProperty("os.name").orEmpty().startsWith("Windows")
     }
 }

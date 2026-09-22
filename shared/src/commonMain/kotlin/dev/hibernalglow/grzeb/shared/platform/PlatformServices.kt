@@ -7,7 +7,7 @@ import dev.hibernalglow.grzeb.core.index.IndexStore
 /**
  * 平台能力入口。
  *
- * 三件事都必须落到平台 UI API 上：Android 的 SAF 要 ActivityResultLauncher，
+ * 这几件事都必须落到平台 UI API 上：Android 的 SAF 要 ActivityResultLauncher，
  * 桌面是 AWT 对话框，Web 需要 File System Access API。把它们收在一个接口里，
  * UI 层就只剩"选目录 → 存 uri → 建文件系统"这一条与平台无关的流程。
  */
@@ -22,8 +22,14 @@ interface PlatformServices {
     /** 按已选目录构造文件系统实例；Android 需要 tree uri 才能列子项。 */
     fun createFileSystem(treeUri: String?): GrzebFileSystem
 
+    /** 该平台是否能在文件管理器里定位到文件（Android 的 SAF 与 Web 都没有这个概念）。 */
+    val isRevealSupported: Boolean
+
     /** 交给系统默认程序打开；成功返回 true。 */
     suspend fun openExternally(uri: String): Boolean
+
+    /** 在系统文件管理器里选中该文件；成功返回 true。 */
+    suspend fun revealInFileManager(uri: String): Boolean
 
     /**
      * 索引库（目录树快照 + 正文缓存）。Android / 桌面落盘，Web 只有内存实现。

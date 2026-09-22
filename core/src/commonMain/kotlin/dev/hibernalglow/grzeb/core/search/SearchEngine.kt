@@ -17,8 +17,29 @@ data class SearchOptions(
     val query: String = "",
     /** 把 query 当作正则而非字面量。 */
     val isRegex: Boolean = false,
+    /**
+     * 把 query 里的 `*` 当作通配符（任意字符，**含换行**）、`?` 当作任意单个非换行字符。
+     *
+     * 与 [isRegex] 互斥，同时为 true 时以 [isRegex] 为准。
+     * 于是 `张三*卡号` 可以跨行匹配，且是**有序**的（张三必须出现在卡号之前）——
+     * 这正好是空格分词那种无序 AND 的"有序版"。
+     */
+    val isWildcard: Boolean = false,
+    /**
+     * 按空白把 query 切成多个关键词，语义是**文件级无序 AND**：
+     * 每个词都要在该文件里出现，但**不要求出现在同一行**。
+     *
+     * 支持 `"短语"` 与 `-排除词`；仅在非正则模式下生效（正则整条编译，不切词）。
+     * 细节见 [QueryParser]。
+     */
+    val isMultiKeyword: Boolean = false,
     val isCaseSensitive: Boolean = false,
-    /** 全词匹配（在 pattern 外包一层 \b）。 */
+    /**
+     * 全词匹配。
+     *
+     * 仅对**不含中日韩字符**的词生效：中文两侧永远构不成 `\b`，加了会得到恒假的 pattern，
+     * 详见 [QueryParser.termRegex]。
+     */
     val isWholeWord: Boolean = false,
     /** 每个文件只保留第一个命中。 */
     val isOnlyFirstMatch: Boolean = false,
@@ -132,7 +153,10 @@ class SearchEngine(
      * 可被协程取消；取消后所有在飞的子协程一起停。
      */
     suspend fun search(rootUri: String): List<FileSearchResult> {
-        val engine = regex ?: return emptyList()
+        // 编译只做一次，遍历时复用同一组正则；某个词编译不出来（正则手滑）就整体放弃
+        val plan = QueryParser.parse(options) ?: return emptyList()
+        // 只有排除词（或空 query）时没有任何必含词，不必去遍历目录
+        if (plan.includes.isEmpty()) return emptyList()
         if (!fileSystem.isSupported) return emptyList()
 
         val results = mutableListOf<FileSearchResult>()
@@ -148,7 +172,7 @@ class SearchEngine(
             currentCoroutineContext().ensureActive()
             val content = io.withPermit { fileSystem.readText(entry.uri) }
             val fileResult = content?.let {
-                searchInContent(entry.uri, entry.name, entry.size, it, engine)
+                searchInContent(entry.uri, entry.name, entry.size, it, plan)
             }
 
             lock.withLock {
@@ -231,8 +255,11 @@ class SearchEngine(
         name: String,
         size: Long?,
         content: String,
-        engine: Regex,
+        plan: SearchQuery,
     ): FileSearchResult? {
+        // 排除词命中任一处，整份文件出局。先判它，省掉下面的按行切分
+        if (plan.excludes.any { it.containsMatchIn(content) }) return null
+
         val lines = content.split('\n')
         val lineStarts = IntArray(lines.size)
         var cursor = 0
@@ -244,44 +271,61 @@ class SearchEngine(
         val found = mutableListOf<SearchMatch>()
         val seen = mutableSetOf<Int>()
 
-        for (match in engine.findAll(content)) {
-            if (!seen.add(match.range.first)) continue
-
-            val lineNumber = lineNumberFor(lineStarts, match.range.first)
-            val line = lines.getOrElse(lineNumber) { "" }
-            // 与 react 版一致：长行放弃上下文，避免预览被无关内容撑满
-            val isLongLine = line.length > 50
-            val effectiveContext = if (isLongLine) 0 else options.contextLines
-
-            val previewStart = (lineNumber - effectiveContext).coerceAtLeast(0)
-            val preview = buildPreview(
-                lines = lines,
-                matchedLine = lineNumber,
-                matchInLine = match.range.first - lineStarts.getOrElse(lineNumber) { 0 },
-                matchLength = match.value.length,
-                contextLines = effectiveContext,
-            )
-
-            found += SearchMatch(
-                matchText = match.value,
-                start = match.range.first,
-                end = match.range.last + 1,
-                lineNumber = lineNumber,
-                preview = preview,
-                previewStartLine = previewStart,
-                indexInLine = match.range.first - lineStarts.getOrElse(lineNumber) { 0 },
-            )
-
-            if (options.isOnlyFirstMatch) break
+        for (engine in plan.includes) {
+            var hits = 0
+            for (match in engine.findAll(content)) {
+                hits++
+                if (seen.add(match.range.first) && found.size < MAX_MATCHES_PER_FILE) {
+                    found += buildMatch(lines, lineStarts, match)
+                }
+                if (options.isOnlyFirstMatch || found.size >= MAX_MATCHES_PER_FILE) break
+            }
+            // 文件级 AND：只要有任何一个必含词在整份文件里一次都没命中，就整份出局。
+            // 注意判定用的是 hits 而不是 found.size —— 命中数会被 MAX_MATCHES_PER_FILE
+            // 截断，用被截断的计数去判会让"命中太少"的文件被误判为不命中。
+            if (hits == 0) return null
         }
 
         if (found.isEmpty()) return null
+        // 多关键词时各处命中是交错收集的，按偏移排序才能让预览按原文顺序展示
+        found.sortBy { it.start }
+
         return FileSearchResult(
             uri = uri,
             relPath = name,
             size = size,
             matches = found,
             matchCount = found.size,
+        )
+    }
+
+    /** 把一处正则命中转成带行号与上下文的 [SearchMatch]。 */
+    private fun buildMatch(
+        lines: List<String>,
+        lineStarts: IntArray,
+        match: MatchResult,
+    ): SearchMatch {
+        val lineNumber = lineNumberFor(lineStarts, match.range.first)
+        val line = lines.getOrElse(lineNumber) { "" }
+        val indexInLine = match.range.first - lineStarts.getOrElse(lineNumber) { 0 }
+        // 与 react 版一致：长行放弃上下文，避免预览被无关内容撑满
+        val isLongLine = line.length > 50
+        val effectiveContext = if (isLongLine) 0 else options.contextLines
+
+        return SearchMatch(
+            matchText = match.value,
+            start = match.range.first,
+            end = match.range.last + 1,
+            lineNumber = lineNumber,
+            preview = buildPreview(
+                lines = lines,
+                matchedLine = lineNumber,
+                matchInLine = indexInLine,
+                matchLength = match.value.length,
+                contextLines = effectiveContext,
+            ),
+            previewStartLine = (lineNumber - effectiveContext).coerceAtLeast(0),
+            indexInLine = indexInLine,
         )
     }
 
@@ -333,18 +377,26 @@ class SearchEngine(
     }
 
     companion object {
-        /** 构建检索正则；非法表达式返回 null。 */
+        /**
+         * 单文件最多保留多少处命中。
+         *
+         * 多关键词会把每个词的命中都收进来，中文小说里搜"的"这种词一份文件就能命中几万处；
+         * 不收口的话结果列表（[SearchCallbacks.onResult] 会累积到 UI）和内存都会被拖垮。
+         *
+         * 截断只影响**展示**，不影响"是否命中"的判定——每个词的命中数在截断之外单独计，
+         * 见 [searchInContent] 里的 `hits`。
+         */
+        const val MAX_MATCHES_PER_FILE = 500
+
+        /**
+         * 把整条 query 当成**单个**词编译，不做多关键词切词。
+         *
+         * 保留这个入口是给 UI 判断"表达式是否合法"用的（返回 null 即非法）。
+         * 需要多关键词语义时请用 [QueryParser.parse]。
+         */
         fun buildRegex(options: SearchOptions): Regex? {
             if (options.query.isEmpty()) return null
-            var pattern = options.query
-            if (!options.isRegex) pattern = Regex.escape(pattern)
-            if (options.isWholeWord) pattern = "\\b$pattern\\b"
-
-            val flags = buildSet {
-                if (!options.isCaseSensitive) add(RegexOption.IGNORE_CASE)
-                add(RegexOption.MULTILINE)
-            }
-            return runCatching { Regex(pattern, flags) }.getOrNull()
+            return QueryParser.termRegex(options.query, options)
         }
     }
 }

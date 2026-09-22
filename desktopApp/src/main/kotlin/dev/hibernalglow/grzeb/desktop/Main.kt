@@ -11,7 +11,8 @@ fun main() = application {
     Window(
         onCloseRequest = ::exitApplication,
         title = "grzeb",
-        state = rememberWindowState(size = DpSize(480.dp, 800.dp)),
+        // 1120dp 宽正好落在 M3 展开窗口（≥840dp）里，默认就能看到两栏布局
+        state = rememberWindowState(size = DpSize(1120.dp, 780.dp)),
     ) {
         GrzebApp()
     }
