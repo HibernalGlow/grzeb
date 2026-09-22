@@ -98,7 +98,8 @@ class SearchUiState {
         isSearching = true
         // 新的一轮检索回到整棵树的根；旧的折叠状态也跟着作废
         currentScope = null
-        expanded = emptySet()
+        collapsedFolders = emptySet()
+        collapsedFiles = emptySet()
         tree = null
 
         val engine = SearchEngine(
@@ -149,7 +150,8 @@ class SearchUiState {
         tree = null
         currentScope = null
         scopePath = emptyList()
-        expanded = emptySet()
+        collapsedFolders = emptySet()
+        collapsedFiles = emptySet()
     }
 
     // ── 索引预热 ────────────────────────────────────────────────────────────
@@ -215,8 +217,23 @@ class SearchUiState {
     var tree by mutableStateOf<SearchTreeNode?>(null)
         private set
 
-    /** 展开的目录 / 文件 uri。默认全折叠：顶层就是"这一层有哪些目录、各多少命中"。 */
-    var expanded by mutableStateOf<Set<String>>(emptySet())
+    /**
+     * 被折叠起来的目录 uri。
+     *
+     * 存"折叠的"而不是"展开的"，这样空集就等于**默认全展开** ——
+     * 树一出来就是完整层级，收起某一层才需要记一笔。
+     */
+    var collapsedFolders by mutableStateOf<Set<String>>(emptySet())
+        private set
+
+    /**
+     * 被折叠的文件节点 uri。
+     *
+     * 与目录同一套口径：存"折叠的"，空集就等于**默认全展开** —— 一轮检索下来直接能看到
+     * 各处理中，不用逐个点。单个文件的命中数由 [DEFAULT_MAX_MATCHES_PER_FILE] 兜着，
+     * 所以铺开也不会淹掉整屏。
+     */
+    var collapsedFiles by mutableStateOf<Set<String>>(emptySet())
         private set
 
     /** 钻取历史（最近的在前），供"最近的范围"快速切回。只活在本次会话里。 */
@@ -230,7 +247,8 @@ class SearchUiState {
         if (currentScope == uri) return
         currentScope = uri
         // 换了范围，折叠状态留着没意义（uri 是不同层的）
-        expanded = emptySet()
+        collapsedFolders = emptySet()
+        collapsedFiles = emptySet()
         rebuildTree(scope, store, force = true)
     }
 
@@ -240,8 +258,12 @@ class SearchUiState {
         drillInto(parent.uri, scope, store)
     }
 
-    fun toggleExpanded(uri: String) {
-        expanded = if (uri in expanded) expanded - uri else expanded + uri
+    fun toggleFolder(uri: String) {
+        collapsedFolders = if (uri in collapsedFolders) collapsedFolders - uri else collapsedFolders + uri
+    }
+
+    fun toggleFile(uri: String) {
+        collapsedFiles = if (uri in collapsedFiles) collapsedFiles - uri else collapsedFiles + uri
     }
 
     /**
@@ -302,5 +324,8 @@ class SearchUiState {
         val TREE_REBUILD_INTERVAL = 400.milliseconds
 
         const val MAX_SCOPE_HISTORY = 20
+
+        /** 只用于文档说明：单文件命中数上限在 core 的 SearchEngine 里。 */
+        const val DEFAULT_MAX_MATCHES_PER_FILE = 500
     }
 }

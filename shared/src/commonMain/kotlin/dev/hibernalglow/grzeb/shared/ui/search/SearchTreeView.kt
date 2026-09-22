@@ -100,17 +100,19 @@ fun ScopeBreadcrumb(
  * - 点文件名 → 预览，跳到第一处命中
  * - 点某处命中 → 预览并跳到那一行
  *
- * 默认全折叠：顶层就是"这一层有哪些目录、各命中多少文件"——
- * 也就是"全部结果 · 241 hits"那一屏。
+ * 目录与文件都**默认全展开**（[collapsedFolders] / [collapsedFiles] 存的是被折叠的那些），
+ * 一轮检索下来直接能看到完整层级和每文件的命中正文。
  */
 @Composable
 fun SearchResultTree(
     node: SearchTreeNode?,
     isLoading: Boolean,
     emptyText: String,
-    expanded: Set<String>,
+    collapsedFolders: Set<String>,
+    collapsedFiles: Set<String>,
     selectedUri: String?,
-    onToggleExpand: (String) -> Unit,
+    onToggleFolder: (String) -> Unit,
+    onToggleFile: (String) -> Unit,
     onDrill: (String) -> Unit,
     onSelect: (FileSearchResult, SearchMatch) -> Unit,
     modifier: Modifier = Modifier,
@@ -123,7 +125,7 @@ fun SearchResultTree(
         return
     }
 
-    val rows = remember(node, expanded) { flatten(node, expanded) }
+    val rows = remember(node, collapsedFolders) { flatten(node, collapsedFolders) }
 
     Column(modifier.fillMaxSize()) {
         ScopeSummary(node, isLoading)
@@ -138,17 +140,17 @@ fun SearchResultTree(
                     FolderRow(
                         node = child,
                         depth = row.depth,
-                        isExpanded = child.uri in expanded,
-                        onToggleExpand = { onToggleExpand(child.uri) },
+                        isExpanded = child.uri !in collapsedFolders,
+                        onToggleExpand = { onToggleFolder(child.uri) },
                         onDrill = { onDrill(child.uri) },
                     )
                 } else {
                     FileRow(
                         node = child,
                         depth = row.depth,
-                        isExpanded = child.uri in expanded,
+                        isExpanded = child.uri !in collapsedFiles,
                         isSelected = child.uri == selectedUri,
-                        onToggleExpand = { onToggleExpand(child.uri) },
+                        onToggleExpand = { onToggleFile(child.uri) },
                         onSelect = onSelect,
                     )
                 }
@@ -301,15 +303,15 @@ private fun asResult(node: SearchTreeNode) = FileSearchResult(
 
 private data class TreeRow(val node: SearchTreeNode, val depth: Int)
 
-/** 按展开状态把树摊平成一行行（只做一层懒加载，避免嵌套滚动）。 */
-private fun flatten(root: SearchTreeNode, expanded: Set<String>): List<TreeRow> {
+/** 按折叠状态把树摊平成一行行（只做一层懒加载，避免嵌套滚动）。 */
+private fun flatten(root: SearchTreeNode, collapsedFolders: Set<String>): List<TreeRow> {
     val rows = mutableListOf<TreeRow>()
 
     fun walk(node: SearchTreeNode, depth: Int) {
         for (child in node.children) {
             rows += TreeRow(child, depth)
             // 文件不在这里下钻：它的命中由 FileRow 自己渲染
-            if (child.isDirectory && child.uri in expanded) walk(child, depth + 1)
+            if (child.isDirectory && child.uri !in collapsedFolders) walk(child, depth + 1)
         }
     }
 
