@@ -116,4 +116,24 @@ class SqlDelightIndexStoreTest {
     fun missingTextIsNull() = runBlocking {
         assertNull(newStore().text(root, "$root/nope.txt"))
     }
+
+    @Test
+    fun lastRootIsTheMostRecentlyWarmed() = runBlocking {
+        val store = newStore()
+        assertNull(store.lastRoot(), "还没预热过任何目录时应当是 null")
+
+        store.markWarmed(root, "刘备", 1_000L)
+        assertEquals(root, store.lastRoot()?.treeUri)
+        assertEquals("刘备", store.lastRoot()?.displayName)
+
+        // 换个目录预热，之后取到的应当是新的那个
+        val other = "content://tree/primary%3A1NOVEL%2F%E7%B2%AE%E8%8D%89"
+        store.markWarmed(other, "粮草", 2_000L)
+        assertEquals(other, store.lastRoot()?.treeUri)
+        assertEquals("粮草", store.lastRoot()?.displayName)
+
+        // 同一目录重新预热（增量刷新会再 mark 一次）不该影响结果
+        store.markWarmed(root, "刘备", 3_000L)
+        assertEquals(root, store.lastRoot()?.treeUri)
+    }
 }

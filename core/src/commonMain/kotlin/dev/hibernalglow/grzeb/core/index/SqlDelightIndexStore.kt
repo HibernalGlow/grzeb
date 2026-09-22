@@ -92,6 +92,12 @@ class SqlDelightIndexStore(private val database: GrzebIndex) : IndexStore {
         queries.markWarmed(tree_uri = treeUri, display_name = displayName, warmed_at = at)
     }
 
+    override suspend fun lastRoot(): StoredRoot? = db {
+        queries.lastRoot().executeAsOneOrNull()?.let {
+            StoredRoot(treeUri = it.tree_uri, displayName = it.display_name)
+        }
+    }
+
     override suspend fun clear(treeUri: String): Unit = db {
         queries.transaction {
             queries.clearContent(treeUri)

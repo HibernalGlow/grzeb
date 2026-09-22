@@ -42,6 +42,10 @@ INSERT OR REPLACE INTO root(tree_uri, display_name, warmed_at) VALUES (?, ?, ?);
 warmedAt:
 SELECT warmed_at FROM root WHERE tree_uri = ?;
 
+-- 最近一次预热过的目录：App 重开时用它回填"上次用的目录"，省得每次都重选。
+lastRoot:
+SELECT tree_uri, display_name FROM root ORDER BY warmed_at DESC LIMIT 1;
+
 upsertEntry:
 INSERT OR REPLACE INTO entry(tree_uri, uri, parent_uri, name, is_dir, size, last_modified)
 VALUES (?, ?, ?, ?, ?, ?, ?);

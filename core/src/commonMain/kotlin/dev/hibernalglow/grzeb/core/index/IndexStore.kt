@@ -32,6 +32,17 @@ data class CachedText(
 )
 
 /**
+ * 上次预热过的根目录。
+ *
+ * Google 的 SAF 授权是持久的（takePersistableUriPermission），所以 Android 上重开 App
+ * 直接用这个 tree uri 就能继续读；桌面端存的就是个绝对路径。
+ */
+data class StoredRoot(
+    val treeUri: String,
+    val displayName: String?,
+)
+
+/**
  * 检索索引库。
  *
  * 存两样东西：目录树快照（[IndexedEntry]）与解码后的正文（[CachedText]）。
@@ -65,6 +76,9 @@ interface IndexStore {
     /** 记录一次预热完成；[displayName] 供 UI 展示。 */
     suspend fun markWarmed(treeUri: String, displayName: String?, at: Long)
 
+    /** 最近一次预热过的目录；没预热过任何目录时返回 null。 */
+    suspend fun lastRoot(): StoredRoot?
+
     /** 清空该根目录的全部索引与缓存（重建索引用）。 */
     suspend fun clear(treeUri: String)
 }
@@ -80,6 +94,7 @@ class InMemoryIndexStore : IndexStore {
     private val texts = mutableMapOf<String, LinkedHashMap<String, CachedText>>()
     private val warmedAt = mutableMapOf<String, Long>()
     private val names = mutableMapOf<String, String?>()
+    private var lastUri: String? = null
 
     override suspend fun status(treeUri: String): IndexStatus = IndexStatus(
         warmedAt = warmedAt[treeUri],
@@ -117,7 +132,10 @@ class InMemoryIndexStore : IndexStore {
     override suspend fun markWarmed(treeUri: String, displayName: String?, at: Long) {
         warmedAt[treeUri] = at
         names[treeUri] = displayName
+        lastUri = treeUri
     }
+
+    override suspend fun lastRoot(): StoredRoot? = lastUri?.let { StoredRoot(it, names[it]) }
 
     override suspend fun clear(treeUri: String) {
         entries.remove(treeUri)
