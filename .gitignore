@@ -1,0 +1,26 @@
+# Gradle
+.gradle/
+build/
+!gradle/wrapper/gradle-wrapper.jar
+local.properties
+
+# Kotlin
+.kotlin/
+kotlin-js-store/
+
+# IDE
+.idea/
+*.iml
+.DS_Store
+
+# Desktop 打包产物
+*.dmg
+*.msi
+*.deb
+
+# Web 构建
+node_modules/
+
+# 平台产物
+*.xcodeproj/xcuserdata/
+*.xcworkspace/xcuserdata/

@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- values-night 限定符要 API 29 才认；更老的机器会一直用这份浅色主题，
+         但 Compose 自己的深色模式（isSystemInDarkTheme）不受影响。 -->
+    <style name="Theme.Grzeb" parent="@android:style/Theme.Material.Light.NoActionBar" />
+</resources>

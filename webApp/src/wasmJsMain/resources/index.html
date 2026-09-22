@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>grzeb</title>
+    <!-- 不要再引 skiko.js：CMP 1.11 的 wasm 产物里只有 skiko.mjs / skiko.wasm，
+         加载器已经被打进 grzeb.js（官方示例里的那个 script 标签是旧的）。 -->
+    <script type="application/javascript" src="grzeb.js"></script>
+    <style>
+        html, body {
+            width: 100%;
+            height: 100%;
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+        }
+
+        #composeApp {
+            width: 100%;
+            height: 100%;
+        }
+    </style>
+</head>
+<body>
+<div id="composeApp"></div>
+</body>
+</html>
