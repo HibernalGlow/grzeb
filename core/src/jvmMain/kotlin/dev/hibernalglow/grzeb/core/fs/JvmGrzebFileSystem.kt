@@ -27,6 +27,7 @@ class JvmGrzebFileSystem(
                     name = file.name,
                     isDirectory = file.isDirectory,
                     size = if (file.isFile) file.length() else null,
+                    lastModified = file.lastModified(),
                 )
             }
             // 目录在前，再按名字排——与 react 版的列表顺序一致

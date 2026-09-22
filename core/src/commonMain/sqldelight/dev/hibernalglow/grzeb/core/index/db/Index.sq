@@ -1,0 +1,82 @@
+-- 检索索引库：目录树快照 + 解码后的正文。
+--
+-- 为什么正文单独一张表、而不是上 FTS5：检索支持正则 / 全词匹配 / 大小写敏感，
+-- 这些语义 FTS 服务不了（FTS 是分词匹配）。真正的收益来自"正文进了库"——
+-- 二次检索不用再走 SAF 读文件 + 解码，直接把文本捞出来在内存里匹配，语义和现网完全一致。
+--
+-- 写入统一用 INSERT OR REPLACE，不用 UPSERT（ON CONFLICT DO UPDATE）：
+-- 后者要 SQLite 3.24+，而 minSdk 24 的老机器上只有 SQLite 3.9，会直接崩。
+-- 这几张表之间没有外键依赖，替换即等价于更新。
+-- 主键统一用 (tree_uri, uri)：同一份索引可以同时服务多个已授权目录。
+
+CREATE TABLE root (
+    tree_uri TEXT NOT NULL PRIMARY KEY,
+    display_name TEXT,
+    warmed_at INTEGER NOT NULL
+);
+
+CREATE TABLE entry (
+    tree_uri TEXT NOT NULL,
+    uri TEXT NOT NULL,
+    parent_uri TEXT,
+    name TEXT NOT NULL,
+    is_dir INTEGER NOT NULL,
+    size INTEGER,
+    last_modified INTEGER,
+    PRIMARY KEY (tree_uri, uri)
+);
+
+CREATE TABLE content (
+    tree_uri TEXT NOT NULL,
+    uri TEXT NOT NULL,
+    last_modified INTEGER,
+    text TEXT NOT NULL,
+    PRIMARY KEY (tree_uri, uri)
+);
+
+CREATE INDEX entry_by_parent ON entry(tree_uri, parent_uri);
+
+markWarmed:
+INSERT OR REPLACE INTO root(tree_uri, display_name, warmed_at) VALUES (?, ?, ?);
+
+warmedAt:
+SELECT warmed_at FROM root WHERE tree_uri = ?;
+
+upsertEntry:
+INSERT OR REPLACE INTO entry(tree_uri, uri, parent_uri, name, is_dir, size, last_modified)
+VALUES (?, ?, ?, ?, ?, ?, ?);
+
+entriesOf:
+SELECT uri, parent_uri, name, is_dir, size, last_modified FROM entry WHERE tree_uri = ?;
+
+entryOf:
+SELECT uri, parent_uri, name, is_dir, size, last_modified FROM entry WHERE tree_uri = ? AND uri = ?;
+
+deleteEntry:
+DELETE FROM entry WHERE tree_uri = ? AND uri = ?;
+
+countFiles:
+SELECT count(*) FROM entry WHERE tree_uri = ? AND is_dir = 0;
+
+textOf:
+SELECT text, last_modified FROM content WHERE tree_uri = ? AND uri = ?;
+
+putText:
+INSERT OR REPLACE INTO content(tree_uri, uri, last_modified, text) VALUES (?, ?, ?, ?);
+
+dropText:
+DELETE FROM content WHERE tree_uri = ? AND uri = ?;
+
+countTexts:
+SELECT count(*) FROM content WHERE tree_uri = ?;
+
+-- 注意：一个标签只能挂**一条**语句（SQLDelight 只取第一条，多写的会被静默丢掉），
+-- 所以重建索引要的三步拆成三个查询，由调用方放进同一个事务。
+clearContent:
+DELETE FROM content WHERE tree_uri = ?;
+
+clearEntries:
+DELETE FROM entry WHERE tree_uri = ?;
+
+clearRootRow:
+DELETE FROM root WHERE tree_uri = ?;

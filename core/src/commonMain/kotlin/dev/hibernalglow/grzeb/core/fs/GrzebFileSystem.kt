@@ -14,6 +14,12 @@ data class FileEntry(
     val isDirectory: Boolean,
     /** 字节数，未知时为 null。 */
     val size: Long? = null,
+    /**
+     * 最后修改时间（epoch millis），未知时为 null。
+     *
+     * 索引增量更新靠它判断"文件有没有变过"——两边都是 null 时只能保守地当作"变了"重读。
+     */
+    val lastModified: Long? = null,
 )
 
 /**

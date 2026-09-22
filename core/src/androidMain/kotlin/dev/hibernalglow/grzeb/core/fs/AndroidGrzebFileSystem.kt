@@ -44,6 +44,7 @@ class AndroidGrzebFileSystem(
                     DocumentsContract.Document.COLUMN_DISPLAY_NAME,
                     DocumentsContract.Document.COLUMN_MIME_TYPE,
                     DocumentsContract.Document.COLUMN_SIZE,
+                    DocumentsContract.Document.COLUMN_LAST_MODIFIED,
                 ),
                 null,
                 null,
@@ -54,12 +55,14 @@ class AndroidGrzebFileSystem(
                     val name = cursor.getString(1) ?: continue
                     val mime = cursor.getString(2)
                     val size = if (cursor.isNull(3)) null else cursor.getLong(3)
+                    val lastModified = if (cursor.isNull(4)) null else cursor.getLong(4)
 
                     entries += FileEntry(
                         uri = DocumentsContract.buildDocumentUriUsingTree(docUri, childId).toString(),
                         name = name,
                         isDirectory = mime == DocumentsContract.Document.MIME_TYPE_DIR,
                         size = size,
+                        lastModified = lastModified,
                     )
                 }
             }

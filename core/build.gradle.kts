@@ -4,6 +4,15 @@ import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 plugins {
     alias(libs.plugins.kotlinMultiplatform)
     alias(libs.plugins.androidMultiplatformLibrary)
+    alias(libs.plugins.sqldelight)
+}
+
+sqldelight {
+    databases {
+        create("GrzebIndex") {
+            packageName.set("dev.hibernalglow.grzeb.core.index.db")
+        }
+    }
 }
 
 kotlin {
@@ -36,11 +45,23 @@ kotlin {
     sourceSets {
         commonMain.dependencies {
             implementation(libs.kotlinx.coroutines.core)
+            implementation(libs.sqldelight.runtime)
+        }
+
+        androidMain.dependencies {
+            implementation(libs.sqldelight.android.driver)
+        }
+
+        jvmMain.dependencies {
+            implementation(libs.sqldelight.sqlite.driver)
         }
 
         // 编码判定是启发式的，靠肉眼验不了，钉几个真实的字节样本
         jvmTest.dependencies {
             implementation(kotlin("test"))
+            implementation(libs.kotlinx.coroutines.core)
+            // 索引库与预热链路用内存 SQLite 跑
+            implementation(libs.sqldelight.sqlite.driver)
         }
     }
 }
