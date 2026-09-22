@@ -1,8 +1,14 @@
 package dev.hibernalglow.grzeb.core.search
 
-import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.currentCoroutineContext
-import kotlinx.coroutines.yield
+import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.sync.withPermit
+import dev.hibernalglow.grzeb.core.fs.FileEntry
 import dev.hibernalglow.grzeb.core.fs.GrzebFileSystem
 import dev.hibernalglow.grzeb.core.text.TextFileTypes
 
@@ -26,6 +32,13 @@ data class SearchOptions(
     val maxPreviewLength: Int = 100,
     /** 短行展示的上下文行数。 */
     val contextLines: Int = 2,
+    /**
+     * 同时在飞的 IO 数（列目录 + 读文件）。
+     *
+     * SAF 每次调用都是一次跨进程查询，瓶颈在延迟不在带宽，所以并发是净赚的；
+     * 但 provider 端也要排队，开太高反而更慢，4 是实测出来的折中起点。
+     */
+    val concurrency: Int = 4,
 ) {
     companion object {
         val DEFAULT_IGNORED_DIRS = listOf(".git", ".svn", ".hg", "node_modules", ".expo", ".cache", ".tmp", "thumbs")
@@ -80,6 +93,12 @@ data class SearchCallbacks(
  * 逻辑移植自 react 版 `lib/search/engine.ts`，但去掉了对 SAF 的直接依赖：
  * 目录遍历与读文件都通过 [GrzebFileSystem] 完成，因此同一份实现可在
  * Android / 桌面 / Web 上运行。
+ *
+ * 与 react 版的关键差别是并发：那边是一层一层顺序走，SAF 上光"列目录"就要几百毫秒到几秒，
+ * 顺序走等于把这些延迟全加上；这里子目录各起一条协程、同目录下的文件再切成几批并行，
+ * 并用 [SearchOptions.concurrency] 限制同时在飞的 IO 数。
+ *
+ * 结果顺序因此是不确定的（谁先扫完谁先进列表）——追加式列表本来也不保证顺序。
  */
 class SearchEngine(
     private val fileSystem: GrzebFileSystem,
@@ -110,7 +129,7 @@ class SearchEngine(
 
     /**
      * 从 [rootUri] 开始递归检索。
-     * 可被协程取消；每扫过若干文件主动 [yield]，避免长时间占用单线程调度器。
+     * 可被协程取消；取消后所有在飞的子协程一起停。
      */
     suspend fun search(rootUri: String): List<FileSearchResult> {
         val engine = regex ?: return emptyList()
@@ -120,51 +139,84 @@ class SearchEngine(
         var scanned = 0
         var matches = 0
 
+        // IO 限流：列目录与读文件都算，别把 provider 打爆
+        val io = Semaphore(options.concurrency.coerceAtLeast(1))
+        // 结果、进度来自多条协程，用锁串起来；顺带保证回调不会并发进 UI
+        val lock = Mutex()
+
+        suspend fun scanFile(entry: FileEntry, depth: Int) {
+            currentCoroutineContext().ensureActive()
+            val content = io.withPermit { fileSystem.readText(entry.uri) }
+            val fileResult = content?.let {
+                searchInContent(entry.uri, entry.name, entry.size, it, engine)
+            }
+
+            lock.withLock {
+                scanned++
+                if (fileResult != null) {
+                    results += fileResult
+                    matches += fileResult.matchCount
+                }
+                callbacks.onProgress(
+                    SearchProgress(
+                        currentFile = entry.name,
+                        scannedFiles = scanned,
+                        totalMatches = matches,
+                        currentDepth = depth,
+                    )
+                )
+                if (fileResult != null) callbacks.onResult(fileResult)
+            }
+        }
+
         suspend fun walk(uri: String, depth: Int) {
             currentCoroutineContext().ensureActive()
             if (depth > options.maxDepth) return
 
-            callbacks.onProgress(
-                SearchProgress(scannedFiles = scanned, totalMatches = matches, currentDepth = depth)
-            )
+            val entries = io.withPermit { fileSystem.list(uri) }
 
-            for (entry in fileSystem.list(uri)) {
-                currentCoroutineContext().ensureActive()
-
+            val subdirectories = mutableListOf<FileEntry>()
+            val files = mutableListOf<FileEntry>()
+            for (entry in entries) {
                 if (entry.isDirectory) {
-                    if (entry.name.startsWith(".") || shouldIgnore(entry.name)) continue
-                    walk(entry.uri, depth + 1)
-                } else {
-                    if (!TextFileTypes.isTextFile(entry.name, options.includeExtensions)) continue
-
-                    scanned++
-                    callbacks.onProgress(
-                        SearchProgress(
-                            currentFile = entry.name,
-                            scannedFiles = scanned,
-                            totalMatches = matches,
-                            currentDepth = depth,
-                        )
-                    )
-
-                    val content = fileSystem.readText(entry.uri) ?: continue
-                    val fileResult = searchInContent(entry.uri, entry.name, entry.size, content, engine)
-                    if (fileResult != null) {
-                        results += fileResult
-                        matches += fileResult.matchCount
-                        callbacks.onResult(fileResult)
+                    if (!entry.name.startsWith(".") && !shouldIgnore(entry.name)) {
+                        subdirectories += entry
                     }
+                } else if (TextFileTypes.isTextFile(entry.name, options.includeExtensions)) {
+                    files += entry
+                }
+            }
 
-                    // 每 5 个文件让出一次，保证 UI 可响应
-                    if (scanned % 5 == 0) yield()
+            coroutineScope {
+                // 同目录下的文件切成几批并行，批数封顶在 concurrency —— 一个目录里
+                // 几万个文件时，一批一条协程，不至于把协程数也撑爆
+                val batches = minOf(options.concurrency, files.size)
+                if (batches > 0) {
+                    val perBatch = (files.size + batches - 1) / batches
+                    for (i in 0 until batches) {
+                        val from = i * perBatch
+                        val to = minOf(from + perBatch, files.size)
+                        if (from >= to) continue
+                        val slice = files.subList(from, to)
+                        launch {
+                            for (file in slice) scanFile(file, depth)
+                        }
+                    }
+                }
+
+                for (directory in subdirectories) {
+                    launch { walk(directory.uri, depth + 1) }
                 }
             }
         }
 
         walk(rootUri, 0)
-        callbacks.onProgress(
-            SearchProgress(scannedFiles = scanned, totalMatches = matches, isComplete = true)
-        )
+
+        lock.withLock {
+            callbacks.onProgress(
+                SearchProgress(scannedFiles = scanned, totalMatches = matches, isComplete = true)
+            )
+        }
         return results
     }
 
@@ -190,7 +242,7 @@ class SearchEngine(
         }
 
         val found = mutableListOf<SearchMatch>()
-        var seen = mutableSetOf<Int>()
+        val seen = mutableSetOf<Int>()
 
         for (match in engine.findAll(content)) {
             if (!seen.add(match.range.first)) continue
