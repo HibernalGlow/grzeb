@@ -77,24 +77,30 @@ class AndroidGrzebFileSystem(
     }
 
     /**
-     * 展示名：优先向 provider 查 DISPLAY_NAME，失败则退回 URI 末段
-     * （SAF 的 document id 里末段通常就是文件名）。
+     * 展示名：文档 URI 优先向 provider 查 DISPLAY_NAME，失败则退回 id 末段。
+     *
+     * 目录树 URI（`…/tree/<id>`）本身没有 DISPLAY_NAME，直接取 id 末段且不查 provider ——
+     * 这个函数会在 composition 里被调用，白跑一次 binder 查询就是一次掉帧。
      */
     override fun displayName(uri: String): String {
-        val docUri = Uri.parse(uri)
-        runCatching {
-            resolver.query(
-                docUri,
-                arrayOf(DocumentsContract.Document.COLUMN_DISPLAY_NAME),
-                null,
-                null,
-                null,
-            )?.use { cursor ->
-                if (cursor.moveToFirst() && !cursor.isNull(0)) return cursor.getString(0)
+        val segments = Uri.parse(uri).pathSegments
+        val idIndex = documentIdIndex(segments)
+        if (idIndex >= 0) {
+            val docUri = Uri.parse(uri)
+            runCatching {
+                resolver.query(
+                    docUri,
+                    arrayOf(DocumentsContract.Document.COLUMN_DISPLAY_NAME),
+                    null,
+                    null,
+                    null,
+                )?.use { cursor ->
+                    if (cursor.moveToFirst() && !cursor.isNull(0)) return cursor.getString(0)
+                }
             }
+            return segments[idIndex].substringAfterLast('/')
         }
-        return runCatching { DocumentsContract.getDocumentId(docUri).substringAfterLast('/') }
-            .getOrDefault(uri)
+        return segments.lastOrNull()?.substringAfterLast('/') ?: uri
     }
 
     override fun rootLocation(): String? = treeUri
@@ -103,17 +109,33 @@ class AndroidGrzebFileSystem(
     fun withTreeUri(newTreeUri: String?): AndroidGrzebFileSystem =
         AndroidGrzebFileSystem(context, newTreeUri)
 
-    private fun documentIdOf(docUri: Uri): String? = runCatching {
-        if (DocumentsContract.isTreeUri(docUri)) {
+    /**
+     * 取 URI 里的文档 id。
+     *
+     * 不能用 `isTreeUri()` 分流：它只看路径里有没有 `/tree/` 段，而子文档 URI 恰好也带这一段
+     * （`…/tree/<树id>/document/<文档id>`），于是每层递归都会拿到根的 id、原地打转。
+     * 这里按 `/document/` 段的位置判断——有它就是在说某个具体文档，否则才是目录树本身。
+     */
+    private fun documentIdOf(docUri: Uri): String? {
+        val segments = docUri.pathSegments
+        val idIndex = documentIdIndex(segments)
+        return if (idIndex >= 0) segments[idIndex] else runCatching {
             DocumentsContract.getTreeDocumentId(docUri)
-        } else {
-            DocumentsContract.getDocumentId(docUri)
-        }
-    }.getOrNull()
+        }.getOrNull()
+    }
+
+    /** `/document/` 后那一段的下标；没有则返回 -1。 */
+    private fun documentIdIndex(segments: List<String>): Int {
+        val index = segments.indexOf(DOCUMENT_SEGMENT)
+        return if (index >= 0 && index + 1 < segments.size) index + 1 else -1
+    }
 
     private companion object {
         /** 单文件读取上限 8 MB，与桌面端一致。 */
         const val MAX_TEXT_BYTES = 8L * 1024 * 1024
+
+        /** DocumentsContract.PATH_DOCUMENT 没在公开 SDK 里暴露，只能用字面量。 */
+        const val DOCUMENT_SEGMENT = "document"
     }
 }
 
