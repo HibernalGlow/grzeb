@@ -1,0 +1,98 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="380" viewBox="0 0 1200 380"
+     role="img" aria-labelledby="hero-title hero-desc">
+  <title id="hero-title">grzeb — Compose Multiplatform 全文检索</title>
+  <desc id="hero-desc">左侧为项目名与一句话说明，右侧是真实的结果树面板：面包屑可回退、目录节点带子树命中计数、文件叶子展开正文并把命中处高亮。</desc>
+
+  <defs>
+    <style>
+      .sans { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif; }
+      .mono { font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace; }
+    </style>
+  </defs>
+
+  <rect width="1200" height="380" rx="26" fill="#131217"/>
+
+  <!-- 母题：目录树的导引竖线与分叉，贯穿左侧 -->
+  <g id="tree-motif" stroke="#2C2933" stroke-width="1.5" fill="none">
+    <path d="M40 92 V 312"/>
+    <path d="M40 128 H 56"/>
+    <path d="M40 224 H 56"/>
+  </g>
+
+  <g id="title-block" class="sans">
+    <text class="mono" x="72" y="92" font-size="18" letter-spacing="2.2" fill="#8C8697">COMPOSE MULTIPLATFORM · FULL-TEXT SEARCH</text>
+
+    <text x="70" y="176" font-size="82" font-weight="700" letter-spacing="-1" fill="#E6E1E5">grzeb</text>
+    <!-- 命中高亮条：把项目名本身当作一处「被命中的文本」 -->
+    <rect x="74" y="186" width="118" height="7" rx="3.5" fill="#E9C46A"/>
+
+    <text x="72" y="238" font-size="28" fill="#C9C4CF">选一个目录，全文检索整棵目录树</text>
+    <text x="72" y="274" font-size="28" fill="#C9C4CF">结果按目录钻取，正文进本地索引库</text>
+
+    <text class="mono" x="72" y="322" font-size="18" fill="#7E7887">Kotlin 2.4.10 · CMP 1.11.1 · SQLDelight 2.4.0</text>
+  </g>
+
+  <g id="result-tree-specimen" transform="translate(628 40)">
+    <rect width="508" height="300" rx="14" fill="#1C1B1F" stroke="#302D36" stroke-width="1.25"/>
+
+    <!-- 应用顶栏：真实标题「全文搜索」 -->
+    <text class="sans" x="22" y="32" font-size="19" font-weight="600" fill="#E6E1E5">全文搜索</text>
+    <text class="mono" x="486" y="32" font-size="17" text-anchor="end" fill="#8C8697">12 文件 | 47 匹配</text>
+
+    <!-- 搜索框 -->
+    <g id="query-field">
+      <rect x="18" y="46" width="472" height="36" rx="9" fill="#24222A" stroke="#3A3644" stroke-width="1.25"/>
+      <text class="mono" x="34" y="70" font-size="19" fill="#E6E1E5">卡号</text>
+      <rect x="76" y="54" width="2" height="20" fill="#D0BCFF"/>
+      <text class="mono" x="474" y="70" font-size="17" text-anchor="end" fill="#D0BCFF">正则</text>
+    </g>
+
+    <!-- 面包屑：钻取到子目录后可回退 -->
+    <g id="breadcrumb" class="sans" font-size="18">
+      <text x="20" y="108" fill="#9A93A3">小说库</text>
+      <text x="78" y="108" fill="#5B5566">›</text>
+      <text x="96" y="108" fill="#E6E1E5">第二卷</text>
+      <rect x="96" y="113" width="58" height="3" rx="1.5" fill="#D0BCFF"/>
+      <text x="474" y="108" font-size="17" text-anchor="end" fill="#D0BCFF">返回上一层</text>
+    </g>
+
+    <!-- 结果树：目录=聚合计数，文件=带命中的叶子 -->
+    <g id="tree" class="sans">
+      <g stroke="#3E3A48" stroke-width="1.5" fill="none">
+        <path d="M28 124 V 190"/>
+        <path d="M28 138 H 44"/>
+        <path d="M28 170 H 44"/>
+        <path d="M28 190 V 210 M44 190 H 28"/>
+      </g>
+
+      <text x="52" y="144" font-size="19" fill="#C9C4CF">卷一</text>
+      <text class="mono" x="486" y="144" font-size="17" text-anchor="end" fill="#7E7887">2 文件 · 7 命中</text>
+
+      <text x="52" y="176" font-size="19" font-weight="600" fill="#E6E1E5">卷二</text>
+      <text class="mono" x="486" y="176" font-size="17" text-anchor="end" fill="#8C8697">6 文件 · 22 命中</text>
+
+      <!-- 命中的文件叶子：琥珀色命中条 -->
+      <rect x="60" y="196" width="4" height="20" rx="2" fill="#E9C46A"/>
+      <text class="mono" x="74" y="212" font-size="19" fill="#E9C46A">ch-03.txt</text>
+      <text class="mono" x="486" y="212" font-size="17" text-anchor="end" fill="#E9C46A">5 命中</text>
+    </g>
+
+    <!-- 正文预览：行号槽 + 命中处高亮，点一处即跳到该行 -->
+    <g id="preview" transform="translate(18 228)">
+      <rect width="472" height="58" rx="9" fill="#17161B"/>
+      <g class="mono" font-size="17">
+        <text x="16" y="24" fill="#5B5566">142</text>
+        <text x="64" y="24" fill="#A9A3B4">她翻开账户页，末四位写着</text>
+        <rect x="292" y="10" width="40" height="19" rx="3" fill="#E9C46A" opacity="0.34"/>
+        <text x="292" y="24" fill="#F2E6C0">卡号</text>
+        <text x="336" y="24" fill="#A9A3B4">。</text>
+
+        <text x="16" y="46" fill="#5B5566">207</text>
+        <text x="64" y="46" fill="#A9A3B4">凭证上的</text>
+        <rect x="142" y="32" width="40" height="19" rx="3" fill="#E9C46A" opacity="0.34"/>
+        <text x="142" y="46" fill="#F2E6C0">卡号</text>
+        <text x="186" y="46" fill="#A9A3B4">与她记下的不一致</text>
+      </g>
+    </g>
+  </g>
+</svg>

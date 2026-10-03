@@ -1,0 +1,134 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="430" viewBox="0 0 1200 430"
+     role="img" aria-labelledby="plat-title plat-desc">
+  <title id="plat-title">三端支持矩阵：桌面与 Android 可真实检索，Web 目前只有界面</title>
+  <desc id="plat-desc">桌面 JVM 与 Android 都接了目录访问、检索与落盘的 SQLDelight 索引库，桌面额外支持在系统里打开与在文件管理器中定位；Web(wasmJs) 能构建能跑，但没有目录访问，文件系统不支持时检索直接返回空，索引库只有内存实现。</desc>
+
+  <defs>
+    <style>
+      .sans { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif; }
+      .mono { font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace; }
+    </style>
+  </defs>
+
+  <rect width="1200" height="430" rx="26" fill="#131217"/>
+
+  <text class="sans" x="56" y="48" font-size="22" font-weight="600" fill="#8C8697">三端各自的真实状态</text>
+  <text class="mono" x="1144" y="48" font-size="18" text-anchor="end" fill="#5B5566">PlatformServices · expect / actual</text>
+
+  <g id="cards" class="sans">
+    <!-- ============ 桌面 ============ -->
+    <g transform="translate(56 78)">
+      <rect width="358" height="272" rx="12" fill="#1C1B1F" stroke="#302D36" stroke-width="1.25"/>
+      <text x="20" y="38" font-size="24" font-weight="700" fill="#E6E1E5">桌面</text>
+      <text class="mono" x="20" y="62" font-size="17" fill="#7E7887">jvm · Compose for Desktop</text>
+      <g transform="translate(268 18)">
+        <rect width="74" height="28" rx="14" fill="#2A2437" stroke="#4A4166"/>
+        <text x="37" y="19" font-size="17" text-anchor="middle" fill="#D0BCFF">可检索</text>
+      </g>
+      <path d="M20 76 H 338" stroke="#2A2730" stroke-width="1.25"/>
+
+      <g transform="translate(20 104)">
+        <g class="rows">
+          <g transform="translate(0 0)">
+            <circle cx="9" cy="14" r="9" fill="#2A2437" stroke="#6E6188"/><path d="M5 14 l3 3 l5 -6" fill="none" stroke="#D0BCFF" stroke-width="1.75"/>
+            <text x="30" y="20" font-size="18" fill="#C9C4CF">目录选择：文件对话框</text>
+          </g>
+          <g transform="translate(0 34)">
+            <circle cx="9" cy="14" r="9" fill="#2A2437" stroke="#6E6188"/><path d="M5 14 l3 3 l5 -6" fill="none" stroke="#D0BCFF" stroke-width="1.75"/>
+            <text x="30" y="20" font-size="18" fill="#C9C4CF">检索：绝对路径遍历</text>
+          </g>
+          <g transform="translate(0 68)">
+            <circle cx="9" cy="14" r="9" fill="#2A2437" stroke="#6E6188"/><path d="M5 14 l3 3 l5 -6" fill="none" stroke="#D0BCFF" stroke-width="1.75"/>
+            <text x="30" y="20" font-size="18" fill="#C9C4CF">索引库：</text>
+            <text class="mono" x="110" y="20" font-size="17" fill="#A9A3B4">~/.grzeb/index.db</text>
+          </g>
+          <g transform="translate(0 102)">
+            <circle cx="9" cy="14" r="9" fill="#2A2437" stroke="#6E6188"/><path d="M5 14 l3 3 l5 -6" fill="none" stroke="#D0BCFF" stroke-width="1.75"/>
+            <text x="30" y="20" font-size="18" fill="#C9C4CF">打开与定位文件</text>
+          </g>
+          <g transform="translate(0 136)">
+            <circle cx="9" cy="14" r="9" fill="#2A2437" stroke="#6E6188"/><path d="M5 14 l3 3 l5 -6" fill="none" stroke="#D0BCFF" stroke-width="1.75"/>
+            <text x="30" y="20" font-size="18" fill="#C9C4CF">两栏布局，侧栏可拖宽</text>
+          </g>
+        </g>
+      </g>
+    </g>
+
+    <!-- ============ Android ============ -->
+    <g transform="translate(442 78)">
+      <rect width="358" height="272" rx="12" fill="#1C1B1F" stroke="#302D36" stroke-width="1.25"/>
+      <text x="20" y="38" font-size="24" font-weight="700" fill="#E6E1E5">Android</text>
+      <text class="mono" x="20" y="62" font-size="17" fill="#7E7887">android · minSdk 24</text>
+      <g transform="translate(268 18)">
+        <rect width="74" height="28" rx="14" fill="#2A2437" stroke="#4A4166"/>
+        <text x="37" y="19" font-size="17" text-anchor="middle" fill="#D0BCFF">可检索</text>
+      </g>
+      <path d="M20 76 H 338" stroke="#2A2730" stroke-width="1.25"/>
+
+      <g transform="translate(20 104)">
+        <g class="rows">
+          <g transform="translate(0 0)">
+            <circle cx="9" cy="14" r="9" fill="#2A2437" stroke="#6E6188"/><path d="M5 14 l3 3 l5 -6" fill="none" stroke="#D0BCFF" stroke-width="1.75"/>
+            <text x="30" y="20" font-size="18" fill="#C9C4CF">目录授权：SAF tree uri</text>
+          </g>
+          <g transform="translate(0 34)">
+            <circle cx="9" cy="14" r="9" fill="#2A2437" stroke="#6E6188"/><path d="M5 14 l3 3 l5 -6" fill="none" stroke="#D0BCFF" stroke-width="1.75"/>
+            <text x="30" y="20" font-size="18" fill="#C9C4CF">检索：content:// URI</text>
+          </g>
+          <g transform="translate(0 68)">
+            <circle cx="9" cy="14" r="9" fill="#2A2437" stroke="#6E6188"/><path d="M5 14 l3 3 l5 -6" fill="none" stroke="#D0BCFF" stroke-width="1.75"/>
+            <text x="30" y="20" font-size="18" fill="#C9C4CF">索引库：</text>
+            <text class="mono" x="110" y="20" font-size="17" fill="#A9A3B4">grzeb-index.db</text>
+          </g>
+          <g transform="translate(0 102)">
+            <circle cx="9" cy="14" r="9" fill="none" stroke="#4A4650"/><path d="M4 14 H 14" stroke="#6E6877" stroke-width="1.75"/>
+            <text x="30" y="20" font-size="18" fill="#8C8697">定位文件：系统无此概念</text>
+          </g>
+          <g transform="translate(0 136)">
+            <circle cx="9" cy="14" r="9" fill="#2A2437" stroke="#6E6188"/><path d="M5 14 l3 3 l5 -6" fill="none" stroke="#D0BCFF" stroke-width="1.75"/>
+            <text x="30" y="20" font-size="18" fill="#C9C4CF">紧凑窗口：整屏单栏</text>
+          </g>
+        </g>
+      </g>
+    </g>
+
+    <!-- ============ Web ============ -->
+    <g transform="translate(828 78)">
+      <rect width="358" height="272" rx="12" fill="#1C1B1F" stroke="#302D36" stroke-width="1.25"/>
+      <text x="20" y="38" font-size="24" font-weight="700" fill="#E6E1E5">Web</text>
+      <text class="mono" x="20" y="62" font-size="17" fill="#7E7887">wasmJs · 界面演示</text>
+      <g transform="translate(268 18)">
+        <rect width="74" height="28" rx="14" fill="#221F27" stroke="#3A3644"/>
+        <text x="37" y="19" font-size="17" text-anchor="middle" fill="#8C8697">仅界面</text>
+      </g>
+      <path d="M20 76 H 338" stroke="#2A2730" stroke-width="1.25"/>
+
+      <g transform="translate(20 104)">
+        <g class="rows">
+          <g transform="translate(0 0)">
+            <circle cx="9" cy="14" r="9" fill="none" stroke="#4A4650"/><path d="M4 14 H 14" stroke="#6E6877" stroke-width="1.75"/>
+            <text x="30" y="20" font-size="18" fill="#8C8697">目录访问：尚未接入</text>
+          </g>
+          <g transform="translate(0 34)">
+            <circle cx="9" cy="14" r="9" fill="none" stroke="#4A4650"/><path d="M4 14 H 14" stroke="#6E6877" stroke-width="1.75"/>
+            <text x="30" y="20" font-size="18" fill="#8C8697">检索：直接返回空</text>
+          </g>
+          <g transform="translate(0 68)">
+            <circle cx="9" cy="14" r="9" fill="none" stroke="#4A4650"/><path d="M4 14 H 14" stroke="#6E6877" stroke-width="1.75"/>
+            <text x="30" y="20" font-size="18" fill="#8C8697">索引库：仅内存实现</text>
+          </g>
+          <g transform="translate(0 102)">
+            <circle cx="9" cy="14" r="9" fill="#2A2437" stroke="#6E6188"/><path d="M5 14 l3 3 l5 -6" fill="none" stroke="#D0BCFF" stroke-width="1.75"/>
+            <text x="30" y="20" font-size="18" fill="#C9C4CF">共用同一份 UI 代码</text>
+          </g>
+          <g transform="translate(0 136)">
+            <circle cx="9" cy="14" r="9" fill="#2A2437" stroke="#6E6188"/><path d="M5 14 l3 3 l5 -6" fill="none" stroke="#D0BCFF" stroke-width="1.75"/>
+            <text x="30" y="20" font-size="18" fill="#C9C4CF">可构建 wasm 产物</text>
+          </g>
+        </g>
+      </g>
+    </g>
+  </g>
+
+  <text class="sans" x="56" y="392" font-size="18" fill="#7E7887">iOS 暂不是目标：core 与 shared 都还没有声明 Kotlin/Native 目标。</text>
+</svg>

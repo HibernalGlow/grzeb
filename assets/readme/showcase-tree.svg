@@ -1,0 +1,135 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="620" viewBox="0 0 1200 620"
+     role="img" aria-labelledby="tree-title tree-desc">
+  <title id="tree-title">结果树：目录聚合计数、钻取换 scope、面包屑回退、命中跳行</title>
+  <desc id="tree-desc">左侧放大展示检索结果面板：目录行显示整棵子树的文件数与命中数，点目录可钻取为新的 scope，面包屑提供「返回上一层」，点某处命中则正文预览滚到对应行。右侧四条标注说明这四件事。</desc>
+
+  <defs>
+    <style>
+      .sans { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif; }
+      .mono { font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace; }
+    </style>
+  </defs>
+
+  <rect width="1200" height="620" rx="26" fill="#131217"/>
+
+  <text class="sans" x="56" y="46" font-size="22" font-weight="600" fill="#8C8697">结果树 · 四件事</text>
+  <text class="mono" x="1144" y="46" font-size="18" text-anchor="end" fill="#5B5566">SearchTreeBuilder → SearchTreeView</text>
+
+  <!-- ================= 左：放大的真实面板 ================= -->
+  <g id="panel" transform="translate(56 76)">
+    <rect width="660" height="494" rx="14" fill="#1C1B1F" stroke="#302D36" stroke-width="1.25"/>
+
+    <text class="sans" x="24" y="36" font-size="21" font-weight="600" fill="#E6E1E5">全文搜索</text>
+    <text class="mono" x="636" y="36" font-size="18" text-anchor="end" fill="#8C8697">12 文件 | 47 匹配</text>
+
+    <g id="query">
+      <rect x="20" y="52" width="620" height="38" rx="9" fill="#24222A" stroke="#3A3644" stroke-width="1.25"/>
+      <text class="mono" x="38" y="78" font-size="20" fill="#E6E1E5">卡号</text>
+      <rect x="82" y="62" width="2" height="20" fill="#D0BCFF"/>
+      <text class="mono" x="622" y="78" font-size="18" text-anchor="end" fill="#D0BCFF">正则</text>
+    </g>
+
+    <g id="crumbs" class="sans" font-size="19">
+      <text x="24" y="116" fill="#9A93A3">小说库</text>
+      <text x="90" y="116" fill="#5B5566">›</text>
+      <text x="110" y="116" fill="#E6E1E5">第二卷</text>
+      <rect x="110" y="121" width="60" height="3" rx="1.5" fill="#D0BCFF"/>
+      <text x="636" y="116" font-size="18" text-anchor="end" fill="#D0BCFF">返回上一层</text>
+    </g>
+
+    <g id="tree" class="sans">
+      <g stroke="#3E3A48" stroke-width="1.5" fill="none">
+        <path d="M32 140 V 292"/>
+        <path d="M32 150 H 50"/>
+        <path d="M32 186 H 50"/>
+        <path d="M32 292 H 50"/>
+        <path d="M66 196 V 258"/>
+        <path d="M66 222 H 84"/>
+        <path d="M66 258 H 84"/>
+      </g>
+
+      <text x="56" y="156" font-size="21" fill="#C9C4CF">卷一</text>
+      <text class="mono" x="636" y="156" font-size="18" text-anchor="end" fill="#7E7887">2 文件 · 7 命中</text>
+
+      <text x="56" y="192" font-size="21" font-weight="600" fill="#E6E1E5">卷二</text>
+      <text class="mono" x="636" y="192" font-size="18" text-anchor="end" fill="#A9A3B4">6 文件 · 22 命中</text>
+
+      <text class="mono" x="90" y="228" font-size="20" fill="#C9C4CF">ch-01.txt</text>
+      <text class="mono" x="636" y="228" font-size="18" text-anchor="end" fill="#7E7887">3 命中</text>
+
+      <rect x="86" y="250" width="4" height="20" rx="2" fill="#E9C46A"/>
+      <text class="mono" x="98" y="264" font-size="20" fill="#E9C46A">ch-03.txt</text>
+      <text class="mono" x="636" y="264" font-size="18" text-anchor="end" fill="#E9C46A">5 命中</text>
+
+      <text x="56" y="298" font-size="21" fill="#C9C4CF">卷三</text>
+      <text class="mono" x="636" y="298" font-size="18" text-anchor="end" fill="#7E7887">4 文件 · 18 命中</text>
+    </g>
+
+    <!-- 正文预览：行号槽 + 全部命中高亮 -->
+    <g id="preview" transform="translate(20 320)">
+      <rect width="620" height="152" rx="9" fill="#17161B"/>
+      <g class="mono" font-size="19">
+        <text x="18" y="30" fill="#5B5566">141</text>
+        <text x="72" y="30" fill="#A9A3B4">她把存折推回去，没有说话。</text>
+
+        <text x="18" y="60" fill="#5B5566">142</text>
+        <text x="72" y="60" fill="#A9A3B4">账户页末四位写着</text>
+        <rect x="228" y="45" width="42" height="20" rx="3" fill="#E9C46A" opacity="0.34"/>
+        <text x="228" y="60" fill="#F7EDCC">卡号</text>
+        <text x="270" y="60" fill="#A9A3B4">：**** 3316。</text>
+
+        <text x="18" y="90" fill="#5B5566">207</text>
+        <text x="72" y="90" fill="#A9A3B4">凭证上的</text>
+        <rect x="148" y="75" width="42" height="20" rx="3" fill="#E9C46A" opacity="0.34"/>
+        <text x="148" y="90" fill="#F7EDCC">卡号</text>
+        <text x="190" y="90" fill="#A9A3B4">与她记下的不一致。</text>
+
+        <text x="18" y="120" fill="#5B5566">208</text>
+        <text x="72" y="120" fill="#A9A3B4">「这钱，是谁取的？」</text>
+      </g>
+      <text class="sans" x="18" y="144" font-size="17" fill="#5B5566">在系统中打开 · 在文件管理器中显示（桌面端）</text>
+    </g>
+  </g>
+
+  <!-- ================= 右：标注 ================= -->
+  <g id="annotations" class="sans">
+    <g stroke="#3E3A48" stroke-width="1.25" stroke-dasharray="4 5" fill="none">
+      <path d="M716 185 H 758"/>
+      <path d="M716 232 H 744 V 272 H 758"/>
+      <path d="M716 268 H 738 V 360 H 758"/>
+      <path d="M716 449 H 758"/>
+    </g>
+
+    <g transform="translate(762 192)">
+      <circle cx="14" cy="-7" r="14" fill="#2A2437" stroke="#4A4166"/>
+      <text class="mono" x="14" y="-1" font-size="16" text-anchor="middle" fill="#D0BCFF">1</text>
+      <text x="40" y="0" font-size="21" font-weight="600" fill="#E6E1E5">面包屑逐级回退</text>
+      <text x="40" y="30" font-size="18" fill="#A9A3B4">「返回上一层」跟着路径</text>
+      <text x="40" y="56" font-size="18" fill="#A9A3B4">走，钻多深都回得来。</text>
+    </g>
+
+    <g transform="translate(762 280)">
+      <circle cx="14" cy="-7" r="14" fill="#2A2437" stroke="#4A4166"/>
+      <text class="mono" x="14" y="-1" font-size="16" text-anchor="middle" fill="#D0BCFF">2</text>
+      <text x="40" y="0" font-size="21" font-weight="600" fill="#E6E1E5">目录行是子树合计</text>
+      <text x="40" y="30" font-size="18" fill="#A9A3B4">「6 文件 · 22 命中」算的</text>
+      <text x="40" y="56" font-size="18" fill="#A9A3B4">是整棵子树，不是本层。</text>
+    </g>
+
+    <g transform="translate(762 368)">
+      <circle cx="14" cy="-7" r="14" fill="#2A2437" stroke="#4A4166"/>
+      <text class="mono" x="14" y="-1" font-size="16" text-anchor="middle" fill="#D0BCFF">3</text>
+      <text x="40" y="0" font-size="21" font-weight="600" fill="#E6E1E5">点目录 = 换 scope</text>
+      <text x="40" y="30" font-size="18" fill="#A9A3B4">树里只剩这个目录下的</text>
+      <text x="40" y="56" font-size="18" fill="#A9A3B4">命中，别处的不会混进来。</text>
+    </g>
+
+    <g transform="translate(762 456)">
+      <circle cx="14" cy="-7" r="14" fill="#2A2437" stroke="#4A4166"/>
+      <text class="mono" x="14" y="-1" font-size="16" text-anchor="middle" fill="#D0BCFF">4</text>
+      <text x="40" y="0" font-size="21" font-weight="600" fill="#E6E1E5">点命中 = 跳到该行</text>
+      <text x="40" y="30" font-size="18" fill="#A9A3B4">整份正文带行号槽铺开，</text>
+      <text x="40" y="56" font-size="18" fill="#A9A3B4">所有命中处一起高亮。</text>
+    </g>
+  </g>
+</svg>
