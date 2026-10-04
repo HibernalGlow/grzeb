@@ -199,6 +199,9 @@ jobs:
       - name: Publish
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # 这个 job 没有 checkout，gh 会去问 git 要仓库上下文然后 fatal: not a git repository。
+          # 直接告诉它仓库是谁，不需要为此拉一份工作树。
+          GH_REPO: ${{ github.repository }}
         run: |
           set -euo pipefail
           ls -l artifacts
