@@ -70,6 +70,24 @@ jobs:
       - name: Build installer
         run: ./gradlew :desktopApp:packageDistributionForCurrentOS --stacktrace
 
+      # jpackage 自己的 stdout/stderr 只写进 build/compose/logs/*.txt，
+      # Gradle 的报错里只给路径不给内容 —— 失败时把参数和日志原文打到 job log 里。
+      - name: Dump jpackage args and logs on failure
+        if: failure()
+        run: |
+          set +e
+          args=$(find desktopApp/build/compose/tmp -name '*.args.txt' -print -quit)
+          if [ -n "$args" ]; then
+            echo "----- jpackage 参数（$args）"
+            tr '\n' ' ' < "$args"; echo
+          fi
+          find desktopApp/build/compose/logs -type f 2>/dev/null | while IFS= read -r f; do
+            echo "----- $f"
+            tail -80 "$f"
+          done
+          echo "----- build/compose 目录树"
+          find desktopApp/build/compose -maxdepth 4 2>/dev/null | head -40
+
       - name: Collect
         run: |
           set -euo pipefail
