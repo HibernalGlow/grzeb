@@ -1,3 +1,4 @@
+import org.jetbrains.compose.desktop.application.dsl.TargetFormat
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 
 plugins {
@@ -26,5 +27,13 @@ dependencies {
 compose.desktop {
     application {
         mainClass = "dev.hibernalglow.grzeb.desktop.MainKt"
+
+        // 不写这个块，packageDistributionForCurrentOS 是个空任务：
+        // 按格式（dmg/msi/deb）的打包任务压根不会注册，构建「成功」但什么都不产出。
+        nativeDistributions {
+            vendor = "HibernalGlow"
+            packageVersion = "0.1.0"
+            targetFormats(TargetFormat.Dmg, TargetFormat.Msi, TargetFormat.Deb)
+        }
     }
 }

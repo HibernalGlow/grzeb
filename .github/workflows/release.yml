@@ -1,0 +1,204 @@
+name: Release
+
+# 打 tag（v*）才建 GitHub Release；不带 tag 手动跑只出 artifact，用来验流水线。
+on:
+  workflow_dispatch:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  meta:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.ver.outputs.version }}
+      tag: ${{ steps.ver.outputs.tag }}
+    steps:
+      - id: ver
+        run: |
+          if [[ "${GITHUB_REF}" == refs/tags/* ]]; then
+            tag="${GITHUB_REF#refs/tags/}"
+            version="${tag#v}"
+          else
+            version="0.0.0-ci"
+            tag=""
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          echo "→ version=$version tag=${tag:-（不打 release）}"
+
+  # ---------- 桌面：三平台各自的原生安装包 ----------
+  desktop:
+    needs: meta
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
+    defaults:
+      run:
+        shell: bash
+    strategy:
+      fail-fast: false
+      matrix:
+        # CMP 1.11.1 在这个项目里只注册了 packageDistributionForCurrentOS，
+        # 没有 packageDmg/packageMsi/packageDeb 这种按格式的任务（实测：task 'packageDmg' not found）。
+        # 所以每个 runner 各跑一次「当前平台打包」，再按扩展名挑要发布的那一个。
+        include:
+          - os: macos-latest
+            ext: dmg
+            label: macos
+          - os: windows-latest
+            ext: msi
+            label: windows
+          - os: ubuntu-latest
+            ext: deb
+            label: linux
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      - name: Build installer
+        run: ./gradlew :desktopApp:packageDistributionForCurrentOS --stacktrace
+
+      - name: Collect
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+          src=$(find desktopApp/build/compose/binaries -type f -name '*.${{ matrix.ext }}' -print -quit)
+          if [[ -z "${src:-}" ]]; then
+            echo "找不到 ${{ matrix.ext }} 产物"; find desktopApp/build/compose/binaries -maxdepth 3 | head -40; exit 1
+          fi
+          out="dist/grzeb-${{ needs.meta.outputs.version }}-${{ matrix.label }}.${{ matrix.ext }}"
+          echo "→ $src  ⇒  $out"
+          cp "$src" "$out"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: desktop-${{ matrix.label }}
+          path: dist/
+          if-no-files-found: error
+
+  # ---------- Android ----------
+  android:
+    needs: meta
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      # compileSdk 37 目前只在 preview 渠道有（platforms;android-37.0 / build-tools;37.0.0），
+      # runner 镜像里没预装，必须显式装，否则 AGP 报 "Failed to find target with hash string 'android-37'"。
+      - name: Install Android SDK 37 (preview channel)
+        run: |
+          set -euo pipefail
+          sdkm="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
+          yes | "$sdkm" --licenses > /dev/null 2>&1 || true
+          "$sdkm" --channel=3 --install \
+            "platform-tools" "platforms;android-37.0" "build-tools;37.0.0" | tail -3
+          ls "$ANDROID_HOME/platforms"
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      - name: Build APKs
+        run: ./gradlew :androidApp:assembleDebug :androidApp:assembleRelease --stacktrace
+
+      - name: Collect
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+          v="${{ needs.meta.outputs.version }}"
+          find androidApp/build/outputs/apk -name '*.apk' -print | while read -r apk; do
+            variant=$(basename "$(dirname "$apk")")
+            cp "$apk" "dist/grzeb-$v-android-$variant.apk"
+          done
+          ls -l dist
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: android
+          path: dist/
+          if-no-files-found: error
+
+  # ---------- Web (wasmJs) ----------
+  web:
+    needs: meta
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      - name: Build distribution
+        run: ./gradlew :webApp:wasmJsBrowserDistribution --stacktrace
+
+      - name: Zip
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+          src=webApp/build/dist/wasmJs/productionExecutable
+          test -d "$src" || { find webApp/build/dist -maxdepth 4; exit 1; }
+          ( cd "$src" && zip -qr "$GITHUB_WORKSPACE/dist/grzeb-${{ needs.meta.outputs.version }}-web-wasm.zip" . )
+          ls -l dist
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: web
+          path: dist/
+          if-no-files-found: error
+
+  # ---------- 只有 tag 触发才真的发布 ----------
+  release:
+    needs: [meta, desktop, android, web]
+    if: needs.meta.outputs.tag != '' && !failure() && !cancelled()
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: true
+
+      - name: Publish
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          ls -l artifacts
+          cat > notes.md <<'MD'
+          Compose Multiplatform 版 grzeb（`compose` 分支）。
+
+          | 文件 | 说明 |
+          | --- | --- |
+          | `*-macos.dmg` / `*-windows.msi` / `*-linux.deb` | 桌面安装包，**未签名**：macOS 首次打开要 `xattr -cr` 或在「系统设置 → 隐私与安全性」放行 |
+          | `*-android-debug.apk` | 可直接安装的调试包（debug 签名） |
+          | `*-android-release.apk` | release 构建，**未签名、装不上**，仓库配了签名密钥后才有意义 |
+          | `*-web-wasm.zip` | wasmJs 静态站点，解压后 `python3 -m http.server` 即可；**当前 Web 端没有目录访问，只能当界面演示** |
+
+          界面文案是简体中文。功能与限制见 `README.md`。
+          MD
+          gh release create "${{ needs.meta.outputs.tag }}" \
+            --target "${GITHUB_SHA}" \
+            --title "grzeb ${{ needs.meta.outputs.version }}" \
+            --prerelease \
+            --notes-file notes.md \
+            artifacts/*
