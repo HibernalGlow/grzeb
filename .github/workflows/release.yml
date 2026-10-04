@@ -207,7 +207,7 @@ jobs:
 
           | 文件 | 说明 |
           | --- | --- |
-          | `*-macos.dmg` / `*-windows.msi` / `*-linux.deb` | 桌面安装包，**未签名**：macOS 首次打开要 `xattr -cr` 或在「系统设置 → 隐私与安全性」放行 |
+          | `*-macos.dmg` / `*-windows.msi` / `*-linux.deb` | 桌面安装包，**未签名**：macOS 首次打开要 `xattr -cr` 或在「系统设置 → 隐私与安全性」放行。mac 包内部的 CFBundleShortVersionString 是 `1.0.0`——jpackage 的 macOS bundler 不接受首位为 0 的版本号，Linux/Windows 无此限制；文件名仍按发布版本命名 |
           | `*-android-debug.apk` | 可直接安装的调试包（debug 签名） |
           | `*-android-release.apk` | release 构建，**未签名、装不上**，仓库配了签名密钥后才有意义 |
           | `*-web-wasm.zip` | wasmJs 静态站点，解压后 `python3 -m http.server` 即可；**当前 Web 端没有目录访问，只能当界面演示** |
