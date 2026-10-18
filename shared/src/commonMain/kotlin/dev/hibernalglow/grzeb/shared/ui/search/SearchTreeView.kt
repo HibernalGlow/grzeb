@@ -125,7 +125,9 @@ fun SearchResultTree(
         return
     }
 
-    val rows = remember(node, collapsedFolders) { flatten(node, collapsedFolders) }
+    val rows = remember(node, collapsedFolders, collapsedFiles) {
+        flatten(node, collapsedFolders, collapsedFiles)
+    }
 
     Column(modifier.fillMaxSize()) {
         ScopeSummary(node, isLoading)
@@ -134,18 +136,25 @@ fun SearchResultTree(
             modifier = Modifier.fillMaxSize(),
             contentPadding = PaddingValues(start = 8.dp, end = 12.dp, top = 4.dp, bottom = 20.dp),
         ) {
-            items(rows, key = { it.node.uri }) { row ->
+            items(rows, key = { it.key }) { row ->
                 val child = row.node
-                if (child.isDirectory) {
-                    FolderRow(
+                when {
+                    row.match != null -> MatchRow(
+                        node = child,
+                        match = row.match,
+                        depth = row.depth,
+                        onSelect = onSelect,
+                    )
+
+                    child.isDirectory -> FolderRow(
                         node = child,
                         depth = row.depth,
                         isExpanded = child.uri !in collapsedFolders,
                         onToggleExpand = { onToggleFolder(child.uri) },
                         onDrill = { onDrill(child.uri) },
                     )
-                } else {
-                    FileRow(
+
+                    else -> FileRow(
                         node = child,
                         depth = row.depth,
                         isExpanded = child.uri !in collapsedFiles,
@@ -260,18 +269,28 @@ private fun FileRow(
             )
             MatchCountBadge(node.matchCount)
         }
+    }
+}
 
-        if (isExpanded) {
-            Column(
-                modifier = Modifier.padding(start = indent(depth) + 20.dp, end = 4.dp, bottom = 6.dp),
-                verticalArrangement = Arrangement.spacedBy(4.dp),
-            ) {
-                val result = asResult(node)
-                node.matches.forEach { match ->
-                    MatchPreview(match = match, onClick = { onSelect(result, match) })
-                }
-            }
-        }
+/**
+ * 命中行。
+ *
+ * 由 [flatten] 摊平成 LazyColumn 的独立 item，而不是塞在 [FileRow] 里面 ——
+ * 一个文件最多 500 处命中，只有可视区的那几条会被组合。
+ */
+@Composable
+private fun MatchRow(
+    node: SearchTreeNode,
+    match: SearchMatch,
+    depth: Int,
+    onSelect: (FileSearchResult, SearchMatch) -> Unit,
+) {
+    Box(
+        Modifier
+            .fillMaxWidth()
+            .padding(start = indent(depth) + 20.dp, end = 4.dp, bottom = 4.dp),
+    ) {
+        MatchPreview(match = match, onClick = { onSelect(asResult(node), match) })
     }
 }
 
@@ -301,17 +320,30 @@ private fun asResult(node: SearchTreeNode) = FileSearchResult(
     matchCount = node.matchCount,
 )
 
-private data class TreeRow(val node: SearchTreeNode, val depth: Int)
+/** 一行：目录行 / 文件行（[match] 为 null），或文件展开出来的命中行。 */
+private data class TreeRow(val node: SearchTreeNode, val depth: Int, val match: SearchMatch? = null) {
+    /** LazyColumn 的 key；命中行要带偏移，否则同文件的几条命中 key 撞车。 */
+    val key: String get() = if (match == null) node.uri else "${node.uri}#${match.start}"
+}
 
-/** 按折叠状态把树摊平成一行行（只做一层懒加载，避免嵌套滚动）。 */
-private fun flatten(root: SearchTreeNode, collapsedFolders: Set<String>): List<TreeRow> {
+/** 按折叠状态把树摊平成一行行：目录、文件、以及已展开文件的命中。 */
+private fun flatten(
+    root: SearchTreeNode,
+    collapsedFolders: Set<String>,
+    collapsedFiles: Set<String>,
+): List<TreeRow> {
     val rows = mutableListOf<TreeRow>()
 
     fun walk(node: SearchTreeNode, depth: Int) {
         for (child in node.children) {
             rows += TreeRow(child, depth)
-            // 文件不在这里下钻：它的命中由 FileRow 自己渲染
-            if (child.isDirectory && child.uri !in collapsedFolders) walk(child, depth + 1)
+            if (!child.isDirectory) {
+                if (child.uri !in collapsedFiles) {
+                    child.matches.forEach { match -> rows += TreeRow(child, depth, match) }
+                }
+            } else if (child.uri !in collapsedFolders) {
+                walk(child, depth + 1)
+            }
         }
     }
 
