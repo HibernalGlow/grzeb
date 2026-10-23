@@ -1,8 +1,8 @@
 [versions]
 agp = "9.1.1"
-android-compileSdk = "37"
+android-compileSdk = "36"
 android-minSdk = "24"
-android-targetSdk = "37"
+android-targetSdk = "35"
 androidx-activity = "1.13.0"
 # CMP 与 Material3 并不同号：runtime/foundation/ui 走 CMP 版本，m3 走与 CMP 1.11.1 匹配的 Expressive 预览线
 # （1.11.0-alpha07，基于 Jetpack Material3 1.5.0-alpha17，含 MaterialExpressiveTheme / MotionScheme / LinearWavyProgressIndicator）。

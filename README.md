@@ -6,170 +6,142 @@
 </p>
 
 <p align="center">
+  <a href="https://github.com/HibernalGlow/grzeb/releases/latest"><img src="https://img.shields.io/github/v/release/HibernalGlow/grzeb?style=flat-square&color=8A2BE2" alt="Latest Release"></a>
   <a href="https://kotlinlang.org"><img src="https://img.shields.io/badge/Kotlin-2.4.10-7F52FF?style=flat-square" alt="Kotlin 2.4.10"></a>
   <a href="https://www.jetbrains.com/compose-multiplatform/"><img src="https://img.shields.io/badge/Compose_Multiplatform-1.11.1-4285F4?style=flat-square" alt="Compose Multiplatform 1.11.1"></a>
   <a href="https://sqldelight.github.io/sqldelight/"><img src="https://img.shields.io/badge/SQLDelight-2.4.0-E9C46A?style=flat-square" alt="SQLDelight 2.4.0"></a>
-  <img src="https://img.shields.io/badge/version-0.2.0-D0BCFF?style=flat-square" alt="版本 0.2.0">
+  <a href="./LICENSE"><img src="https://img.shields.io/badge/license-MIT-green?style=flat-square" alt="MIT License"></a>
 </p>
 
 <p align="center">简体中文 · <a href="./README_EN.md">English</a></p>
 
-选一个目录，把整棵目录树里的纯文本全量检索出来。**结果不是扁平列表，而是一棵能钻取的结果树**：
-目录行显示整棵子树的文件数与命中数，点目录换 scope，点命中直接跳到正文那一行。
-正文会缓进本地 SQLDelight 库，所以第二次搜同一批文件既不用重新读盘，也不用重新解码。
+**grzeb** 是一款基于 **Compose Multiplatform** 构建的高性能跨平台本地代码与纯文本检索工具，深度覆盖 **桌面端（macOS / Windows / Linux）** 与 **移动端（Android）**。
 
-## 结果树长这样
+界面设计遵循最新的 **Material 3 Expressive（M3E）** 规范，并结合类似 **VSCode** 的层级检索与多工作区组织体验。告别单薄的扁平结果流，按真实目录树分层聚合，支持多目录并行检索、增量秒级预热、最近搜索历史与自定义后缀过滤。
+
+---
+
+### 📥 快速下载安装
+
+最新正式发布版本：**[v0.2.1](https://github.com/HibernalGlow/grzeb/releases/tag/v0.2.1)**
+
+| 平台 | 安装包产物 | 说明 |
+| :--- | :--- | :--- |
+| 🍎 **macOS** | [`grzeb-0.2.1-macos.dmg`](https://github.com/HibernalGlow/grzeb/releases/download/v0.2.1/grzeb-0.2.1-macos.dmg) | 原生 DMG 镜像（首次运行在「系统设置 → 隐私与安全性」放行即可） |
+| 🪟 **Windows** | [`grzeb-0.2.1-windows.msi`](https://github.com/HibernalGlow/grzeb/releases/download/v0.2.1/grzeb-0.2.1-windows.msi) | 原生 MSI 安装程序引导 |
+| 🐧 **Linux** | [`grzeb-0.2.1-linux.deb`](https://github.com/HibernalGlow/grzeb/releases/download/v0.2.1/grzeb-0.2.1-linux.deb) | Debian / Ubuntu 软件包 |
+| 📱 **Android** | [`grzeb-0.2.1-android-debug.apk`](https://github.com/HibernalGlow/grzeb/releases/download/v0.2.1/grzeb-0.2.1-android-debug.apk) / [`*-release.apk`](https://github.com/HibernalGlow/grzeb/releases/download/v0.2.1/grzeb-0.2.1-android-release.apk) | 支持 Android 7.0+（API 24~36，已签名可直接安装测试） |
+
+---
+
+## 🌟 核心特性一览
+
+### 1. VSCode 风格层级结果树与多工作区支持
+- **多目录聚合检索**：支持同时添加多个工作区目录并行检索，树根按 Workspace 清晰分离。
+- **相对路径真实分层**：无论底层是本地文件路径还是 Android SAF URI，均统一基于从根算起的相对路径还原树结构。
+- **就地折叠与批量控制**：支持整行就地展开/折叠目录，提供快捷「全部展开」与「全部折叠」动作；文件节点副标题清晰展示所属相对路径与匹配命中徽章。
 
 <p align="center">
-  <img src="./assets/readme/showcase-tree.svg" width="100%"
-       alt="结果树面板放大图：四条标注分别说明面包屑逐级回退、目录行是子树合计、点目录换 scope、点命中跳到该行">
+  <img src="./assets/readme/screenshot_vscode_search_tree.png" width="92%"
+       alt="VSCode 风格的搜索树界面：多工作区层级分明、一键全部展开/折叠、命中行数高亮预览">
 </p>
 
-层级不是从结果路径里猜的，而是查索引库的 `parentUri` 链上溯出来的（`core/…/search/SearchTree.kt:56-111`）。
-这样 Android 的 SAF `content://` URI 和桌面的绝对路径能走同一套代码；索引还没热完时，
-位置未知的文件会平铺挂在当前 scope 下——**宁可铺得不漂亮，也不能把结果丢了**。
+### 2. Material 3 Expressive 设计规范
+- **Rhythm 风格视觉质感**：顶部 36dp 主容器品牌徽章、全景底部搜索栏、自适应动态弹性圆角与光标反馈。
+- **展开式筛选胶囊**：底部栏集成「区分大小写」、「正则表达式」、「全词匹配」以及「仅预热」即时筛选。
+- **表现力空状态**：集成常见格式分类矩阵（代码、网页、文本、配置、文档）与最近搜索历史记录，支持一键点击回填、单项清理与全量清空。
 
-## 怎么跑的
+<p align="center">
+  <img src="./assets/readme/screenshot_history_and_filters.png" width="92%"
+       alt="M3 Expressive 搜索首页：底部停靠搜索栏、搜索历史记录与格式矩阵">
+</p>
+
+### 3. Rhythm 风格分组设置面板
+- **四段式结构化管理**：工作区管理、索引预热开关、检索格式拓展、搜索偏好设置。
+- **预热开关与动态波浪指示器**：支持按需关闭预热仅走实时文件系统，或开启预热享受 `LinearWavyProgressIndicator` 动态索引反馈。
+- **格式库与用户自定义后缀**：直观展示 50+ 种在册分类扩展名，并允许用户自由输入添加/删除自定义扩展名（如 `.custom`、`.vue`、`.proto`）。
+- **实时过滤**：设置顶部配备过滤搜索栏，支持关键词即时筛选各分组内容。
+
+<p align="center">
+  <img src="./assets/readme/screenshot_settings_rhythm.png" width="92%"
+       alt="M3 Expressive 设置面板：四段分组卡片、预热控制、自定义扩展名管理">
+</p>
+
+---
+
+## ⚙️ 核心架构与原理
 
 <p align="center">
   <img src="./assets/readme/workflow.svg" width="100%"
-       alt="四个阶段的流程图：IndexWarmer 增量预热、SQLDelight 索引库三张表、SearchEngine 并行检索、SearchTreeBuilder 构建结果树，下方说明为什么不用 FTS5、进度条为什么是不确定的">
+       alt="架构流程：IndexWarmer 增量预热、SQLDelight 索引库、SearchEngine 并行检索、SearchTreeBuilder 结果树构建">
 </p>
 
-- **索引库不用 FTS5**，是刻意的：检索要支持正则、全词匹配、大小写敏感，这些语义分词索引服务不了。
-  真正的收益来自「正文进了库」——`content` 表存解码后的文本，二次检索直接把文本捞出来在内存里匹配，
-  语义和现网完全一致（`core/…/db/Index.sq:1-11`）。
-- **并行遍历**：子目录各起一条协程，同目录下的文件再切成几批并行，用 `Semaphore(concurrency)`
-  限住同时在飞的 IO 数（默认 4）。Android 上每次 SAF 调用都是跨进程查询，瓶颈在延迟不在带宽，
-  并发是净赚的（`core/…/search/SearchEngine.kt:62,167,196-235`）。代价是**结果顺序不确定**：谁先扫完谁先进列表。
-- **读穿缓存**：`IndexedFileSystem` 先查快照，快照没热完就回落到真实文件系统；预热完成后
-  每 1 秒复查一次时间戳，自动切到缓存（`core/…/index/IndexedFileSystem.kt:21-77,100`）。
-- **增量预热**：按 `lastModified` 补差，磁盘上已经消失的条目从库里剔掉（`core/…/index/IndexWarmer.kt:87-88,189`）。
-  选完目录自动开跑，不用点按钮。
-- **记住上次目录**：App 重开时用 `root` 表里最近一条预热记录回填目录，省得每次都重选
-  （`Index.sq:45-47`、`shared/…/SearchScreen.kt:86-90`）。
+- **正文缓存，不用 FTS5**：检索需精准支持任意正文字符串、正则、全词匹配与大小写敏感，分词全文索引无法满足代码与非切词文本需求。通过将正文缓存入 SQLite，二次检索直接在内存中极速流式匹配。
+- **高并发协程遍历**：子目录独立协程，同目录下按批次并发读取，借助 `Semaphore(concurrency)` 严格控制 IO 压力。特别是在 Android SAF 跨进程调用的场景下，并发收益显著。
+- **读穿缓存（Read-Through）**：`IndexedFileSystem` 优先查缓存快照，未完成时无感回落至真实文件系统；预热完成后自动复查时间戳保持同步。
+- **增量同步**：依据 `lastModified` 比对磁盘文件，磁盘已删除文件自动从库中剔除。
 
 ### 中文不乱码是硬要求
 
-判定顺序写在 `core/…/text/TextDecoder.kt:6-20`：
+判定顺序实现于 `core/src/commonMain/kotlin/dev/hibernalglow/grzeb/core/text/TextDecoder.kt`：
 
 ```text
-1. BOM：UTF-8 / UTF-16 LE / UTF-16 BE
-2. 含 NUL 字节 → 呈「隔一个字节一个 NUL」的判为无 BOM UTF-16，否则判二进制
-   （jpg / apk / zip 都在这一步被挡掉）
-3. 按 UTF-8 解，没有替换字符就采用
-4. 退 GB18030（GBK / GB2312 的超集）—— 中文小说绝大多数是它。两道门槛：
-   解出来不能有替换字符，且汉字占比 ≥ 5%
-5. 替换字符超过全文十分之一，才退到 Latin-1 逐字节映射；
-   否则仍返回带替换字符的 UTF-8（也就是说：这一步之外，坏字节是真的会丢）
+1. BOM 优先：UTF-8 / UTF-16 LE / UTF-16 BE
+2. 含 NUL 字节 → 隔字节 NUL 判定为无 BOM UTF-16；否则判为二进制（jpg/apk/zip 在此步拦截）
+3. 按 UTF-8 解码，若无替换字符直接采纳
+4. 回落 GB18030（兼容 GBK / GB2312）：
+   - 解码不得出现替换字符
+   - 且汉字字符占比 ≥ 5%（避免误判 Latin-1）
+5. 替换字符比例超过全文 1/10 时回退 Latin-1 逐字节映射；否则保留带标记的 UTF-8 文本
 ```
 
-第 4 步的第一道门槛挡住 Latin-1 正文被误判成 GBK（法文重音字节后面常跟空格或标点，不是合法 GBK 尾字节），
-第二道挡住「基本是 ASCII、只有零星高位字节」的文件。
+---
 
-## 快速开始
+## 🖥️ 平台支持矩阵
 
-环境：JDK 17+（Gradle 9.6.1 由 wrapper 提供，JDK 得自己装）、Android 目标需要 compileSdk 37 的 Android SDK。
-`settings.gradle.kts` 把阿里云镜像排在最前，国内网络直连 Maven Central 有时会卡在 `CLOSE_WAIT` 上。
+| 平台能力 | 桌面端 (JVM: macOS / Windows / Linux) | 移动端 (Android) |
+| :--- | :--- | :--- |
+| **目录选择** | macOS 原生 `FileDialog` / 其他系统 Swing `JFileChooser` | Android SAF（Storage Access Framework）Tree URI |
+| **索引库存储** | 本地目录持久化 `~/.grzeb/index.db` | 应用沙盒内 `grzeb-index.db` |
+| **真实全文检索** | 支持（多工作区并行、内存高速缓存） | 支持（SAF 树增量并发读） |
+| **在文件管理器中定位** | 原生支持（macOS `open -R` / Win `explorer /select,` / Linux `xdg-open`） | 移动端无此概念（点击直接在内置预览器查看命中行） |
+| **M3 自适应布局** | 双栏分栏，支持拖拽调节宽度并自动记忆 | 单栏折叠视图，根据窗口尺寸自动切流 |
 
+---
+
+## 🛠️ 本地开发与构建
+
+### 开发环境要求
+- **JDK 17+**（构建脚本已适配 JDK 21）
+- **Android SDK**（编译 target 需 Android 37 预览通道或对应 AGP 9.1+ 环境）
+
+### 常用 Gradle 指令
 ```bash
-./gradlew :desktopApp:run                              # 桌面端，直接起窗口
-./gradlew :androidApp:installDebug                     # Android：连上设备后装调试包
+# 启动桌面端调试
+./gradlew :desktopApp:run
+
+# 编译并安装 Android 调试包（需连接真机或启动模拟器）
+./gradlew :androidApp:installDebug
+
+# 运行跨平台核心单元测试
+./gradlew test :core:jvmTest :shared:jvmTest
+
+# 打包当前操作系统的原生桌面安装包（DMG / MSI / DEB）
+./gradlew :desktopApp:packageDistributionForCurrentOS
 ```
 
-第一次搜就四步：
-
-1. 点「点击选择搜索目录...」——桌面弹文件对话框（macOS 走原生 `FileDialog`，其他系统走 Swing
-   `JFileChooser`，标题都是「选择搜索目录」），Android 走 SAF 授权一棵树；
-2. 等「正在建索引...」的预热条走完（也可以不等，检索会自己回落到真实文件系统）；
-3. 输入关键词，点「搜索」；
-4. 在结果树里点目录钻取、点面包屑回退、点某处命中跳到正文对应行。
-
-打包：`:desktopApp:packageDistributionForCurrentOS`（或 `:packageUberJarForCurrentOS`）。
-
-## 支持平台各自的真实状态
-
-| | 桌面 (jvm) | Android |
-| --- | --- | --- |
-| 目录访问 | 文件对话框（macOS 原生 / 其他 Swing） | SAF tree uri |
-| 索引库 | `~/.grzeb/index.db` | `grzeb-index.db` |
-| 真实检索 | 是 | 是 |
-| 在文件管理器中定位 | 是（`open -R` / `explorer /select,` / `xdg-open`） | 系统无此概念 |
-
-两端共用同一份 UI，平台差异全收在 `PlatformServices` 这一个接口里
-（`shared/…/platform/PlatformServices.kt:14-43`，`expect fun rememberPlatformServices()` 配两个 actual）。
-
-布局按 M3 窗口尺寸分类分流：断点 600 / 840dp，**按内容宽度判定**。只有展开窗口才并排两栏
-（中等窗口扣掉 400dp 侧栏后列表放不下），侧栏可拖、双击复位（`shared/…/ui/AdaptiveLayout.kt:24-60,77-99`），
-宽度存进 `rememberSaveable`（`shared/…/SearchScreen.kt:107`）。桌面窗口默认 1120×780，正好落在展开档，一开就是两栏。
-
-## 界面里的检索选项
-
-「搜索选项」里只有四个开关（`shared/…/SearchScreen.kt:381-392`）：
-
-| 开关 | 语义 |
-| --- | --- |
-| 区分大小写 | 默认不区分 |
-| 正则表达式 | 整条 query 原样编译、**不切词**；编译失败提示「正则表达式无效」 |
-| 全词匹配 | 只对**不含中日韩字符**的词生效——中文两侧永远构不成 `\b`，硬加会得到恒假的 pattern |
-| 每文件首个 | 每个文件只留第一处命中 |
-
-`SearchOptions` 里的 `isWildcard`（`*` 跨行、`?` 单个非换行）和 `isMultiKeyword`
-（空白分词的无序 AND，支持 `"短语"` 与 `-排除词`）**在 core 里已经实现并有测试，但 UI 没有开关**，
-`search()` 只传上面那四个开关（外加两个写死的常量）——所以现在用不到。同理，`maxDepth`、`ignoredDirs`、
-`includeExtensions`、并发数都只有代码里的值，**没有设置界面可改**：界面把 `maxDepth` 写死成 **15**
-（`shared/…/SearchUiState.kt:320`），core 的默认值才是 10。
-
-## 项目结构
-
+### 模块结构
 ```text
-core/       文件系统抽象 · 解码 · 索引库与预热 · 检索引擎 · 结果树构建器（不含任何 UI 依赖）
-shared/     共用的 Compose UI + PlatformServices（expect / actual）
-desktopApp/ 窗口入口        androidApp/ Activity 入口
+core/        平台无关的核心逻辑：文件系统抽象、解码、SQLDelight 索引库、检索引擎、树构建器（零 UI 依赖）
+shared/      共用 Compose UI 界面、M3 Expressive 组件库与 PlatformServices 平台服务
+desktopApp/  桌面端入口（macOS/Win/Linux 窗口生命周期、AWT 适配）
+androidApp/  移动端入口（Android Activity、SAF 授权与权限生命周期）
 ```
 
-依赖只有一条：`shared → core`，两个 app 模块都只依赖 `shared`。
-DI 是手工的——`rememberPlatformServices()` 加 `remember {}`，没有 Koin / Hilt。
+---
 
-| 想改的东西 | 去哪儿 |
-| --- | --- |
-| 加一种扩展名 | `core/…/text/TextFileTypes.kt:9-23`（52 种纯文本 + 4 种电子书扩展名在册） |
-| 改查询语法 | `core/…/search/QueryParser.kt` |
-| 改索引表结构 | `core/…/sqldelight/…/Index.sq` |
-| 加一个平台 | 实现 `PlatformServices` 的 actual，再实现 `GrzebFileSystem` |
+## 📌 当前已知边界与规划
 
-## 开发
-
-```bash
-./gradlew :core:jvmTest        # 7 个 JVM 测试类：解析 / 引擎 / 建树 / 解码 / 索引三件套
-./scripts/dev-desktop.sh       # 改 .kt / .kts / .sq 就自动重启桌面端，一轮约 10~30s
-```
-
-`dev-desktop.sh` 用 1 秒轮询而不是 `fswatch`：后者往管道里写事件时是 4KB 块缓冲的，
-单条改动根本传不到 `while read`。它只结束可执行文件是 `java` 的匹配进程——按命令行匹配会误伤
-任何恰好提到这两个字符串的 shell。
-
-## 当前限制
-
-不打算含糊过去的部分：
-
-- **iOS 不是当前目标**：`core` 与 `shared` 都还没声明 Kotlin/Native 目标，也没有 `iosMain`。
-- **不支持电子书正文**。`.epub` / `.mobi` / `.fb2` / `.rtf` 在扩展名白名单里，但解析模块还没接：
-  epub 是 zip、mobi 是二进制，含 NUL 会在解码第 2 步被判成二进制直接跳过；
-  fb2（XML）和 rtf 本身是文本，会被**原样检索**——命中的是标签和转义串，不是正文。别当成「支持 EPUB」。
-- **统计式编码探测还没做**：无 BOM 且正文是汉字的 UTF-16 认不出来，会被当二进制跳过。
-- **没有设置界面、没有手动重建索引的入口**（`IndexedFileSystem.invalidate` 无人调用，
-  `IndexStore.clear` 只有测试在调），**也没有搜索历史界面**（`scopeHistory` 只在状态里维护，UI 从不显示它）。
-- **进度条是不确定的**：core 只报「扫过了多少」，没有总数，所以不给百分比。
-  react 版那个 50% → 100% 是写死的假值，这里没有照搬。
-- 单文件读取上限 **8 MB**，每个文件最多记 **500 处**命中，界面按 **15 层**深度遍历（core 默认 10），
-  跳过 `.` 开头的目录与 `node_modules` 等默认忽略项。
-- **界面文案是硬编码的简体中文**，没有字符串资源，也没有多语言。
-- 本分支还没有 `LICENSE` 文件。
-
-## 来源
-
-`compose` 分支是 Compose Multiplatform 的重写版，同一份产品的 React Native 实现留在 `react` 分支
-（那边的 README 见 `origin/react:README.md`），更早的起点是一个 Tauri + React 的 Android 模板
-（在 `origin/main:README.md`，本地没有 `main` 分支）。这一版把检索与索引逻辑收进了与平台无关的 `core`，
-UI 只写一份。
+- **iOS 目标**：架构上已实现平台解耦，待接入 Kotlin/Native 工具链与 iOS DocumentPicker。
+- **电子书正文提取**：`.epub` / `.mobi` 扩展名在预设中，但当前仅作纯文本解压探测，暂未接入完整的流式正文解析器。
+- **授权许可**：本项目基于 [MIT License](./LICENSE) 开源。
