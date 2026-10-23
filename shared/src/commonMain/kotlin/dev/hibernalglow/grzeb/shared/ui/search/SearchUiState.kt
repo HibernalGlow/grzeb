@@ -17,6 +17,7 @@ import dev.hibernalglow.grzeb.core.search.SearchOptions
 import dev.hibernalglow.grzeb.core.search.SearchProgress
 import dev.hibernalglow.grzeb.core.search.SearchTreeBuilder
 import dev.hibernalglow.grzeb.core.search.SearchTreeNode
+import dev.hibernalglow.grzeb.core.text.TextFileTypes
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
@@ -40,6 +41,15 @@ class SearchUiState {
     var isWholeWord by mutableStateOf(false)
     var isOnlyFirstMatch by mutableStateOf(false)
     var showOptions by mutableStateOf(false)
+
+    /** 是否启用目录索引预热；默认关闭，不进行自动预热。 */
+    var isWarmEnabled by mutableStateOf(false)
+
+    /** 用户自定义的文件扩展名列表（统一小写带点，如 .custom）。 */
+    val customExtensions = mutableStateListOf<String>()
+
+    /** 是否正在展示设置界面。 */
+    var showSettings by mutableStateOf(false)
 
     /** 累积结果。用 SnapshotStateList 而不是 `list + item`，否则大目录下会退化成 O(n²)。 */
     val results = mutableStateListOf<FileSearchResult>()
@@ -81,6 +91,7 @@ class SearchUiState {
             isOnlyFirstMatch = isOnlyFirstMatch,
             maxDepth = MAX_DEPTH,
             contextLines = CONTEXT_LINES,
+            includeExtensions = customExtensions.toList(),
         )
         // react 版没有这一步：正则写错了只会静默返回空结果，这里直接告诉用户
         if (SearchEngine.buildRegex(options) == null) {
@@ -186,7 +197,11 @@ class SearchUiState {
                 val warmer = IndexWarmer(
                     fileSystem = fileSystem,
                     store = store,
-                    options = SearchOptions(maxDepth = MAX_DEPTH, contextLines = CONTEXT_LINES),
+                    options = SearchOptions(
+                        maxDepth = MAX_DEPTH,
+                        contextLines = CONTEXT_LINES,
+                        includeExtensions = customExtensions.toList(),
+                    ),
                     onProgress = { if (token == warmToken) warmProgress = it },
                 )
                 indexStatus = warmer.warm(root)
@@ -198,6 +213,54 @@ class SearchUiState {
                 if (token == warmToken) warmProgress = null
             }
         }
+    }
+
+    /** 取消当前正在进行的索引预热。 */
+    fun cancelWarm() {
+        warmToken++
+        warmJob?.cancel()
+        warmJob = null
+        warmProgress = null
+    }
+
+    /**
+     * 添加自定义扩展名（例如 ".custom" 或 "xyz"）。
+     * 若输入无效或已存在（包括已在内置扩展名中），则返回 false。
+     */
+    fun addCustomExtension(extension: String): Boolean {
+        val normalized = TextFileTypes.normalizeExtension(extension) ?: return false
+        if (normalized in customExtensions || normalized in TextFileTypes.DEFAULT_EXTENSIONS) {
+            return false
+        }
+        customExtensions.add(normalized)
+        return true
+    }
+
+    /**
+     * 批量解析并添加自定义扩展名（支持逗号、分号、换行或空格分隔）。
+     * 返回成功添加的扩展名数量。
+     */
+    fun addCustomExtensions(input: String): Int {
+        val parts = input.split(',', '，', ' ', ';', '；', '\n', '\t')
+        var added = 0
+        for (part in parts) {
+            val trimmed = part.trim()
+            if (trimmed.isNotEmpty() && addCustomExtension(trimmed)) {
+                added++
+            }
+        }
+        return added
+    }
+
+    /** 移除指定的自定义扩展名。 */
+    fun removeCustomExtension(extension: String) {
+        val normalized = TextFileTypes.normalizeExtension(extension) ?: extension.lowercase()
+        customExtensions.remove(normalized)
+    }
+
+    /** 清空全部自定义扩展名。 */
+    fun clearCustomExtensions() {
+        customExtensions.clear()
     }
 
     // ── 结果树 / 钻取 scope ─────────────────────────────────────────────────

@@ -4,10 +4,10 @@ android-compileSdk = "37"
 android-minSdk = "24"
 android-targetSdk = "37"
 androidx-activity = "1.13.0"
-# CMP 与 Material3 并不同号：runtime/foundation/ui 走 CMP 版本，m3 走它自己的稳定线。
-# 这两个值取自 compose-multiplatform 1.11.1 插件的实际解析结果（material3 = 1.9.0）。
+# CMP 与 Material3 并不同号：runtime/foundation/ui 走 CMP 版本，m3 走与 CMP 1.11.1 匹配的 Expressive 预览线
+# （1.11.0-alpha07，基于 Jetpack Material3 1.5.0-alpha17，含 MaterialExpressiveTheme / MotionScheme / LinearWavyProgressIndicator）。
 compose-multiplatform = "1.11.1"
-compose-material3 = "1.9.0"
+compose-material3 = "1.11.0-alpha07"
 kotlin = "2.4.10"
 kotlinx-coroutines = "1.11.0"
 sqldelight = "2.4.0"

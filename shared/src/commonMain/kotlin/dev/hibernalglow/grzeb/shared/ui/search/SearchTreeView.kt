@@ -1,5 +1,12 @@
 package dev.hibernalglow.grzeb.shared.ui.search
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
@@ -16,13 +23,20 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import dev.hibernalglow.grzeb.core.search.FileSearchResult
@@ -34,7 +48,7 @@ import dev.hibernalglow.grzeb.shared.ui.GrzebIcons
 /**
  * 面包屑：整棵树的根 → 当前 scope，每一节都能点回去。
  *
- * 左边那个箭头就是"退回上一层"，和点上一节等价（窄屏上没有系统的返回键可用）。
+ * 采用胶囊表面层级区分可回退节点与当前所在节点。
  */
 @Composable
 fun ScopeBreadcrumb(
@@ -47,38 +61,60 @@ fun ScopeBreadcrumb(
     Row(
         modifier = modifier
             .fillMaxWidth()
-            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f))
+            .background(MaterialTheme.colorScheme.surfaceContainerLow)
             .horizontalScroll(rememberScrollState())
-            .padding(horizontal = 8.dp, vertical = 6.dp),
+            .padding(horizontal = 12.dp, vertical = 6.dp),
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(2.dp),
+        horizontalArrangement = Arrangement.spacedBy(4.dp),
     ) {
         if (path.size > 1) {
-            Icon(
-                imageVector = GrzebIcons.ChevronRight,
-                contentDescription = "返回上一层",
+            Box(
                 modifier = Modifier
-                    .size(16.dp)
+                    .size(22.dp)
+                    .clip(CircleShape)
+                    .background(MaterialTheme.colorScheme.surfaceContainerHighest)
                     .clickable { onNavigate(path[path.size - 2]) },
-                tint = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(
+                    imageVector = GrzebIcons.ChevronRight,
+                    contentDescription = "返回上一层",
+                    modifier = Modifier
+                        .size(14.dp)
+                        .graphicsLayer { rotationZ = 180f },
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
         }
 
         path.forEachIndexed { index, segment ->
             val isCurrent = index == path.lastIndex
-            Text(
-                text = segment.name,
-                style = MaterialTheme.typography.labelMedium,
-                color = if (isCurrent) {
-                    MaterialTheme.colorScheme.onSurface
-                } else {
-                    MaterialTheme.colorScheme.primary
-                },
-                maxLines = 1,
+            Box(
                 modifier = Modifier
+                    .clip(MaterialTheme.shapes.extraSmall)
+                    .background(
+                        if (isCurrent) {
+                            MaterialTheme.colorScheme.secondaryContainer
+                        } else {
+                            Color.Transparent
+                        }
+                    )
                     .clickable(enabled = !isCurrent) { onNavigate(segment) }
-                    .padding(horizontal = 2.dp),
-            )
+                    .padding(horizontal = 6.dp, vertical = 2.dp),
+            ) {
+                Text(
+                    text = segment.name,
+                    style = MaterialTheme.typography.labelMedium.copy(
+                        fontWeight = if (isCurrent) FontWeight.SemiBold else FontWeight.Medium,
+                    ),
+                    color = if (isCurrent) {
+                        MaterialTheme.colorScheme.onSecondaryContainer
+                    } else {
+                        MaterialTheme.colorScheme.primary
+                    },
+                    maxLines = 1,
+                )
+            }
 
             if (!isCurrent) {
                 Text(
@@ -95,13 +131,13 @@ fun ScopeBreadcrumb(
  * 结果树。
  *
  * 目录与文件是同一种节点，区别只在点下去做什么：
- * - 箭头 → 就地展开 / 折叠（目录展开出下一层，文件展开出各处理中）
+ * - 箭头 → 就地展开 / 折叠（目录展开出下一层，文件展开出各处命中）
  * - 点目录名 → 钻进这个范围（scope +1，面包屑变长）
  * - 点文件名 → 预览，跳到第一处命中
  * - 点某处命中 → 预览并跳到那一行
  *
- * 目录与文件都**默认全展开**（[collapsedFolders] / [collapsedFiles] 存的是被折叠的那些），
- * 一轮检索下来直接能看到完整层级和每文件的命中正文。
+ * 保持紧凑的信息密度，不给每一行包厚重卡片，靠缩进、图标色彩、选中态容器色（secondaryContainer）
+ * 和琥珀色命中计数徽章传达层级。
  */
 @Composable
 fun SearchResultTree(
@@ -132,7 +168,7 @@ fun SearchResultTree(
 
         LazyColumn(
             modifier = Modifier.fillMaxSize(),
-            contentPadding = PaddingValues(start = 8.dp, end = 12.dp, top = 4.dp, bottom = 20.dp),
+            contentPadding = PaddingValues(start = 8.dp, end = 12.dp, top = 4.dp, bottom = 24.dp),
         ) {
             items(rows, key = { it.node.uri }) { row ->
                 val child = row.node
@@ -166,13 +202,13 @@ private fun ScopeSummary(node: SearchTreeNode, isLoading: Boolean) {
         text = if (isLoading) {
             "检索中… 已找到 ${node.fileCount} 个文件 · ${node.matchCount} 处命中"
         } else {
-            "${node.fileCount} 个文件 · ${node.matchCount} 处命中"
+            "当前范围：${node.fileCount} 个文件 · ${node.matchCount} 处命中"
         },
         style = MaterialTheme.typography.labelSmall,
         color = MaterialTheme.colorScheme.onSurfaceVariant,
         modifier = Modifier
             .fillMaxWidth()
-            .padding(start = 12.dp, top = 8.dp, bottom = 2.dp),
+            .padding(start = 14.dp, top = 8.dp, bottom = 4.dp),
     )
 }
 
@@ -188,29 +224,33 @@ private fun FolderRow(
     Row(
         modifier = Modifier
             .fillMaxWidth()
+            .padding(vertical = 1.dp)
+            .clip(MaterialTheme.shapes.small)
             .clickable(onClick = onDrill)
-            .padding(start = indent(depth), top = 10.dp, bottom = 10.dp, end = 4.dp),
+            .padding(start = indent(depth), top = 7.dp, bottom = 7.dp, end = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(4.dp),
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
     ) {
         Caret(visible = hasChildren, isExpanded = isExpanded, onClick = onToggleExpand)
         Icon(
-            imageVector = GrzebIcons.Folder,
+            imageVector = if (isExpanded) GrzebIcons.FolderOpen else GrzebIcons.Folder,
             contentDescription = null,
             modifier = Modifier.size(16.dp),
-            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+            tint = MaterialTheme.colorScheme.secondary,
         )
         Text(
             text = node.name,
-            style = MaterialTheme.typography.bodyMedium,
+            style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Medium),
+            color = MaterialTheme.colorScheme.onSurface,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
             modifier = Modifier.weight(1f),
         )
-        MatchCountBadge(node.fileCount)
+        MatchCountBadge(count = node.fileCount, isHighlighted = false)
     }
 }
 
+@OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 private fun FileRow(
     node: SearchTreeNode,
@@ -224,21 +264,32 @@ private fun FileRow(
     // 显式标成 () -> Unit：不然 `first?.let { … }` 会把返回类型推成 Unit?
     val select: () -> Unit = { first?.let { onSelect(asResult(node), it) } }
 
+    val rowContainerColor by animateColorAsState(
+        targetValue = if (isSelected) {
+            MaterialTheme.colorScheme.secondaryContainer
+        } else {
+            Color.Transparent
+        },
+        animationSpec = MaterialTheme.motionScheme.fastEffectsSpec(),
+    )
+
+    val rowContentColor = if (isSelected) {
+        MaterialTheme.colorScheme.onSecondaryContainer
+    } else {
+        MaterialTheme.colorScheme.onSurface
+    }
+
     Column(Modifier.fillMaxWidth()) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .background(
-                    if (isSelected) {
-                        MaterialTheme.colorScheme.primary.copy(alpha = 0.08f)
-                    } else {
-                        MaterialTheme.colorScheme.surface
-                    },
-                )
+                .padding(vertical = 1.dp)
+                .clip(MaterialTheme.shapes.small)
+                .background(rowContainerColor)
                 .clickable(onClick = select)
-                .padding(start = indent(depth), top = 8.dp, bottom = 8.dp, end = 4.dp),
+                .padding(start = indent(depth), top = 7.dp, bottom = 7.dp, end = 8.dp),
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(4.dp),
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
         ) {
             Caret(
                 visible = node.matches.size > 1,
@@ -249,21 +300,34 @@ private fun FileRow(
                 imageVector = GrzebIcons.Description,
                 contentDescription = null,
                 modifier = Modifier.size(16.dp),
-                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                tint = if (isSelected) {
+                    MaterialTheme.colorScheme.primary
+                } else {
+                    MaterialTheme.colorScheme.onSurfaceVariant
+                },
             )
             Text(
                 text = node.name,
-                style = MaterialTheme.typography.bodyMedium,
+                style = MaterialTheme.typography.bodyMedium.copy(
+                    fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal,
+                ),
+                color = rowContentColor,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.weight(1f),
             )
-            MatchCountBadge(node.matchCount)
+            MatchCountBadge(count = node.matchCount, isHighlighted = true)
         }
 
-        if (isExpanded) {
+        AnimatedVisibility(
+            visible = isExpanded,
+            enter = expandVertically(MaterialTheme.motionScheme.defaultSpatialSpec()) +
+                fadeIn(MaterialTheme.motionScheme.fastEffectsSpec()),
+            exit = shrinkVertically(MaterialTheme.motionScheme.defaultSpatialSpec()) +
+                fadeOut(MaterialTheme.motionScheme.fastEffectsSpec()),
+        ) {
             Column(
-                modifier = Modifier.padding(start = indent(depth) + 20.dp, end = 4.dp, bottom = 6.dp),
+                modifier = Modifier.padding(start = indent(depth) + 22.dp, end = 4.dp, top = 2.dp, bottom = 6.dp),
                 verticalArrangement = Arrangement.spacedBy(4.dp),
             ) {
                 val result = asResult(node)
@@ -275,6 +339,7 @@ private fun FileRow(
     }
 }
 
+@OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 private fun Caret(visible: Boolean, isExpanded: Boolean, onClick: () -> Unit) {
     if (!visible) {
@@ -282,12 +347,26 @@ private fun Caret(visible: Boolean, isExpanded: Boolean, onClick: () -> Unit) {
         Box(Modifier.width(20.dp))
         return
     }
-    Icon(
-        imageVector = if (isExpanded) GrzebIcons.ExpandMore else GrzebIcons.ChevronRight,
-        contentDescription = if (isExpanded) "折叠" else "展开",
-        modifier = Modifier.size(20.dp).clickable(onClick = onClick),
-        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+    val rotation by animateFloatAsState(
+        targetValue = if (isExpanded) 90f else 0f,
+        animationSpec = MaterialTheme.motionScheme.fastSpatialSpec(),
     )
+    Box(
+        modifier = Modifier
+            .size(20.dp)
+            .clip(CircleShape)
+            .clickable(onClick = onClick),
+        contentAlignment = Alignment.Center,
+    ) {
+        Icon(
+            imageVector = GrzebIcons.ChevronRight,
+            contentDescription = if (isExpanded) "折叠" else "展开",
+            modifier = Modifier
+                .size(16.dp)
+                .graphicsLayer { rotationZ = rotation },
+            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+    }
 }
 
 private fun indent(depth: Int) = (8 + depth * 14).dp

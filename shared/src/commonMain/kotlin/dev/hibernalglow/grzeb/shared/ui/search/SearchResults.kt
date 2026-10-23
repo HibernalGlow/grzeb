@@ -2,6 +2,7 @@ package dev.hibernalglow.grzeb.shared.ui.search
 
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -17,6 +18,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -29,8 +31,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Size
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontFamily
@@ -42,9 +44,7 @@ import androidx.compose.ui.unit.dp
 import dev.hibernalglow.grzeb.core.search.FileSearchResult
 import dev.hibernalglow.grzeb.core.search.SearchMatch
 import dev.hibernalglow.grzeb.shared.ui.GrzebIcons
-
-/** 命中文本的底色，取自 react 版的 `bg-yellow-500/30`。 */
-internal val HighlightColor = Color(0x4DEAB308)
+import dev.hibernalglow.grzeb.shared.ui.theme.GrzebThemeDefaults
 
 /** 结果列表，对应 react 版的 `SearchResultList`。点中一处命中即选定它的预览。 */
 @Composable
@@ -77,21 +77,32 @@ fun SearchResultList(
 @Composable
 internal fun CenteredHint(text: String, modifier: Modifier) {
     Box(modifier = modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-        Text(
-            text = text,
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            textAlign = TextAlign.Center,
-            modifier = Modifier.padding(24.dp),
-        )
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+            modifier = Modifier
+                .clip(MaterialTheme.shapes.medium)
+                .background(MaterialTheme.colorScheme.surfaceContainerLow)
+                .padding(horizontal = 24.dp, vertical = 18.dp),
+        ) {
+            Icon(
+                imageVector = GrzebIcons.Search,
+                contentDescription = null,
+                modifier = Modifier.size(20.dp),
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Text(
+                text = text,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                textAlign = TextAlign.Center,
+            )
+        }
     }
 }
 
 /**
  * 单个文件的命中卡片。
- *
- * 多于一处的文件可以折叠；只有一处时始终展开（react 版折叠后仍会把那一处显示在下面，
- * 这里直接合并成一种状态）。
  */
 @Composable
 private fun SearchResultCard(
@@ -104,6 +115,14 @@ private fun SearchResultCard(
 
     Card(
         modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
+        shape = MaterialTheme.shapes.medium,
+        colors = CardDefaults.cardColors(
+            containerColor = if (isSelected) {
+                MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.5f)
+            } else {
+                MaterialTheme.colorScheme.surfaceContainerLow
+            },
+        ),
         border = if (isSelected) {
             BorderStroke(1.dp, MaterialTheme.colorScheme.primary)
         } else {
@@ -131,7 +150,7 @@ private fun SearchResultCard(
                     imageVector = if (result.isDirectory) GrzebIcons.Folder else GrzebIcons.Description,
                     contentDescription = null,
                     modifier = Modifier.size(16.dp),
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    tint = MaterialTheme.colorScheme.primary,
                 )
                 Text(
                     text = result.relPath,
@@ -141,7 +160,7 @@ private fun SearchResultCard(
                     modifier = Modifier.weight(1f),
                 )
                 if (result.matchCount > 0) {
-                    MatchCountBadge(result.matchCount)
+                    MatchCountBadge(result.matchCount, isHighlighted = true)
                 }
             }
 
@@ -159,23 +178,39 @@ private fun SearchResultCard(
     }
 }
 
+/**
+ * 计数徽章：
+ * - [isHighlighted] = true 用于文件命中数（采用暖琥珀 `tertiaryContainer` 突出命中密度）
+ * - [isHighlighted] = false 用于目录文件数（采用 `surfaceContainerHighest` 保持克制）
+ */
 @Composable
-internal fun MatchCountBadge(count: Int) {
+internal fun MatchCountBadge(count: Int, isHighlighted: Boolean = true) {
+    val containerColor = if (isHighlighted) {
+        MaterialTheme.colorScheme.tertiaryContainer
+    } else {
+        MaterialTheme.colorScheme.surfaceContainerHighest
+    }
+    val contentColor = if (isHighlighted) {
+        MaterialTheme.colorScheme.onTertiaryContainer
+    } else {
+        MaterialTheme.colorScheme.onSurfaceVariant
+    }
+
     Box(
         modifier = Modifier
             .clip(CircleShape)
-            .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.12f))
+            .background(containerColor)
             .padding(horizontal = 8.dp, vertical = 2.dp),
     ) {
         Text(
             text = if (count > 999) "999+" else count.toString(),
             style = MaterialTheme.typography.labelSmall,
-            color = MaterialTheme.colorScheme.primary,
+            color = contentColor,
         )
     }
 }
 
-/** 单处命中：左侧一条主色竖线 + 等宽的预览文本。 */
+/** 单处命中：紧凑 M3E 表面容器 + 左侧主色圆角指示条 + 等宽预览文本。 */
 @Composable
 internal fun MatchPreview(match: SearchMatch, onClick: () -> Unit) {
     val shape = MaterialTheme.shapes.small
@@ -184,15 +219,18 @@ internal fun MatchPreview(match: SearchMatch, onClick: () -> Unit) {
         modifier = Modifier
             .fillMaxWidth()
             .clip(shape)
-            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
+            .background(MaterialTheme.colorScheme.surfaceContainerLow)
+            .border(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f), shape)
             .drawBehind {
-                drawRect(
+                val barWidth = 3.dp.toPx()
+                drawRoundRect(
                     color = accent,
-                    size = Size(width = 2.dp.toPx(), height = size.height),
+                    size = Size(width = barWidth, height = size.height),
+                    cornerRadius = CornerRadius(barWidth, barWidth),
                 )
             }
             .clickable(onClick = onClick)
-            .padding(8.dp),
+            .padding(start = 10.dp, end = 8.dp, top = 6.dp, bottom = 6.dp),
     ) {
         HighlightedText(match)
     }
@@ -207,40 +245,60 @@ internal fun MatchPreview(match: SearchMatch, onClick: () -> Unit) {
  */
 @Composable
 private fun HighlightedText(match: SearchMatch) {
+    val extendedColors = GrzebThemeDefaults.extendedColors
+    val codeStyle = GrzebThemeDefaults.codeTextStyle
     val lines = remember(match.preview) {
         match.preview.split('\n').let { if (it.size > 1 && it.last().isEmpty()) it.dropLast(1) else it }
     }
 
-    Column(modifier = Modifier.fillMaxWidth()) {
+    Column(
+        modifier = Modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(1.dp),
+    ) {
         lines.forEachIndexed { index, line ->
             val absoluteLine = match.previewStartLine + index
-            Row(modifier = Modifier.fillMaxWidth()) {
+            val isMatchLine = absoluteLine == match.lineNumber
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.Top,
+            ) {
                 Text(
                     text = (absoluteLine + 1).toString(),
-                    style = MaterialTheme.typography.labelSmall,
-                    fontFamily = FontFamily.Monospace,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    style = codeStyle,
+                    color = if (isMatchLine) {
+                        MaterialTheme.colorScheme.primary
+                    } else {
+                        extendedColors.codeGutterText
+                    },
+                    fontWeight = if (isMatchLine) FontWeight.SemiBold else FontWeight.Normal,
                     textAlign = TextAlign.End,
                     maxLines = 1,
-                    modifier = Modifier.width(40.dp).padding(end = 6.dp),
+                    modifier = Modifier.width(38.dp).padding(end = 8.dp),
                 )
-                if (absoluteLine == match.lineNumber) {
+                if (isMatchLine) {
                     val (start, end) = highlightRange(line, match)
                     Text(
                         text = buildAnnotatedString {
                             append(line.substring(0, start))
-                            withStyle(SpanStyle(background = HighlightColor, fontWeight = FontWeight.Bold)) {
+                            withStyle(
+                                SpanStyle(
+                                    background = extendedColors.matchHighlightContainer,
+                                    color = extendedColors.onMatchHighlightContainer,
+                                    fontWeight = FontWeight.Bold,
+                                )
+                            ) {
                                 append(line.substring(start, end))
                             }
                             append(line.substring(end))
                         },
-                        style = MaterialTheme.typography.labelSmall,
+                        style = codeStyle,
+                        color = MaterialTheme.colorScheme.onSurface,
                         modifier = Modifier.weight(1f),
                     )
                 } else {
                     Text(
                         text = line,
-                        style = MaterialTheme.typography.labelSmall,
+                        style = codeStyle,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.weight(1f),
                     )

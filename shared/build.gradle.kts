@@ -42,6 +42,10 @@ kotlin {
             implementation(libs.kotlinx.coroutines.core)
         }
 
+        commonTest.dependencies {
+            implementation(kotlin("test"))
+        }
+
         androidMain.dependencies {
             // SAF 目录选择走 ActivityResultLauncher
             implementation(libs.androidx.activity.compose)
