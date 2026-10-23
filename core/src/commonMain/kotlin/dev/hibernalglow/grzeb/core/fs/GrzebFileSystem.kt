@@ -30,7 +30,6 @@ data class FileEntry(
  * - androidMain → SAF（Storage Access Framework）
  * - jvmMain     → java.io / java.nio
  * - iosMain     → 最低兼容（暂不支持，返回空）
- * - wasmJsMain  → 最低兼容
  */
 interface GrzebFileSystem {
 

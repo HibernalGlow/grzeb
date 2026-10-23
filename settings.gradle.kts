@@ -8,9 +8,12 @@ enableFeaturePreview("TYPESAFE_PROJECT_ACCESSORS")
 // 注意 pluginManagement 必须排在脚本最前面，且块内看不到脚本级的 val，只能内联地址。
 pluginManagement {
     repositories {
-        maven("https://maven.aliyun.com/repository/gradle-plugin")
-        maven("https://maven.aliyun.com/repository/public")
-        maven("https://maven.aliyun.com/repository/google")
+        val isCi = System.getenv("CI") == "true" || System.getenv("GITHUB_ACTIONS") == "true"
+        if (!isCi) {
+            maven("https://maven.aliyun.com/repository/gradle-plugin")
+            maven("https://maven.aliyun.com/repository/public")
+            maven("https://maven.aliyun.com/repository/google")
+        }
         google {
             mavenContent {
                 includeGroupAndSubgroups("androidx")
@@ -25,8 +28,11 @@ pluginManagement {
 
 dependencyResolutionManagement {
     repositories {
-        maven("https://maven.aliyun.com/repository/public")
-        maven("https://maven.aliyun.com/repository/google")
+        val isCi = System.getenv("CI") == "true" || System.getenv("GITHUB_ACTIONS") == "true"
+        if (!isCi) {
+            maven("https://maven.aliyun.com/repository/public")
+            maven("https://maven.aliyun.com/repository/google")
+        }
         google {
             mavenContent {
                 includeGroupAndSubgroups("androidx")
@@ -42,4 +48,3 @@ include(":core")
 include(":shared")
 include(":androidApp")
 include(":desktopApp")
-include(":webApp")

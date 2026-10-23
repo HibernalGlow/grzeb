@@ -88,7 +88,6 @@ connections to Maven Central occasionally stall in `CLOSE_WAIT` from CN networks
 ```bash
 ./gradlew :desktopApp:run                              # desktop, opens a window
 ./gradlew :androidApp:installDebug                      # Android: install the debug build on a device
-./gradlew :webApp:wasmJsBrowserDevelopmentRun           # Web (wasmJs): UI only, see below
 ```
 
 First search is four steps:
@@ -101,28 +100,20 @@ First search is four steps:
 3. type a keyword and press 「搜索」(*"search"*);
 4. in the tree: tap a folder to drill in, tap the breadcrumb to step back, tap a match to jump to its line.
 
-Packaging: `:desktopApp:packageDistributionForCurrentOS` (or `:packageUberJarForCurrentOS`) and
-`:webApp:wasmJsBrowserDistribution`.
+Packaging: `:desktopApp:packageDistributionForCurrentOS` (or `:packageUberJarForCurrentOS`).
 
 ## What each platform really does
 
-<p align="center">
-  <img src="./assets/readme/platform-matrix.svg" width="100%"
-       alt="Support matrix: desktop and Android marked searchable, Web marked UI-only, listing directory access, search, index location and system-level actions item by item">
-</p>
+| | Desktop (jvm) | Android |
+| --- | --- | --- |
+| Directory access | file dialog (native on macOS, Swing elsewhere) | SAF tree uri |
+| Index store | `~/.grzeb/index.db` | `grzeb-index.db` |
+| Real search | yes | yes |
+| Reveal in file manager | yes (`open -R` / `explorer /select,` / `xdg-open`) | no such concept |
 
-| | Desktop (jvm) | Android | Web (wasmJs) |
-| --- | --- | --- | --- |
-| Directory access | file dialog (native on macOS, Swing elsewhere) | SAF tree uri | **not wired up** |
-| Index store | `~/.grzeb/index.db` | `grzeb-index.db` | in-memory only |
-| Real search | yes | yes | no — returns empty |
-| Reveal in file manager | yes (`open -R` / `explorer /select,` / `xdg-open`) | no such concept | no |
-
-All three share one UI; every platform difference is funneled through the single `PlatformServices`
+Both share one UI; every platform difference is funneled through the single `PlatformServices`
 interface (`shared/…/platform/PlatformServices.kt:14-43`, `expect fun rememberPlatformServices()` plus
-three actuals). The web build **compiles, runs and is feature-complete as a shell**, but has no directory
-access, so `isSupported=false` short-circuits search to an empty result
-(`shared/…/PlatformServices.wasmJs.kt:19-33`, `core/…/search/SearchEngine.kt:160`). For now it is a UI demo.
+two actuals).
 
 Layout follows M3 window size classes at 600 / 840dp, measured on **content width**. Two panes appear only
 in an expanded window (at medium width the list has no room left after a 400dp sidebar); the sidebar is
@@ -155,7 +146,7 @@ pins `maxDepth` at **15** (`shared/…/SearchUiState.kt:320`); core's default of
 core/       filesystem abstraction · decoding · index store & warming · search engine ·
             result-tree builder   (zero UI dependencies)
 shared/     the one Compose UI + PlatformServices (expect / actual)
-desktopApp/ window entry       androidApp/ Activity entry       webApp/ ComposeViewport entry
+desktopApp/ window entry       androidApp/ Activity entry
 ```
 
 One dependency edge: `shared → core`. All three app modules depend only on `shared`.
@@ -184,7 +175,6 @@ those strings.
 
 The parts I am not going to gloss over:
 
-- **The web build cannot search.** No directory access; only the UI is real.
 - **iOS is not a target right now**: neither `core` nor `shared` declares a Kotlin/Native target, and
   there is no `iosMain`.
 - **No ebook bodies.** `.epub` / `.mobi` / `.fb2` / `.rtf` are on the extension whitelist, but no parser is

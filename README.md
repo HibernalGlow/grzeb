@@ -75,7 +75,6 @@
 ```bash
 ./gradlew :desktopApp:run                              # 桌面端，直接起窗口
 ./gradlew :androidApp:installDebug                     # Android：连上设备后装调试包
-./gradlew :webApp:wasmJsBrowserDevelopmentRun          # Web(wasmJs)：只有界面能跑，见下文
 ```
 
 第一次搜就四步：
@@ -86,27 +85,19 @@
 3. 输入关键词，点「搜索」；
 4. 在结果树里点目录钻取、点面包屑回退、点某处命中跳到正文对应行。
 
-打包：`:desktopApp:packageDistributionForCurrentOS`（或 `:packageUberJarForCurrentOS`）、
-`:webApp:wasmJsBrowserDistribution`。
+打包：`:desktopApp:packageDistributionForCurrentOS`（或 `:packageUberJarForCurrentOS`）。
 
-## 三端各自的真实状态
+## 支持平台各自的真实状态
 
-<p align="center">
-  <img src="./assets/readme/platform-matrix.svg" width="100%"
-       alt="三端支持矩阵：桌面与 Android 标为可检索，Web 标为仅界面，逐项列出目录访问、检索、索引库落点与系统级动作">
-</p>
+| | 桌面 (jvm) | Android |
+| --- | --- | --- |
+| 目录访问 | 文件对话框（macOS 原生 / 其他 Swing） | SAF tree uri |
+| 索引库 | `~/.grzeb/index.db` | `grzeb-index.db` |
+| 真实检索 | 是 | 是 |
+| 在文件管理器中定位 | 是（`open -R` / `explorer /select,` / `xdg-open`） | 系统无此概念 |
 
-| | 桌面 (jvm) | Android | Web (wasmJs) |
-| --- | --- | --- | --- |
-| 目录访问 | 文件对话框（macOS 原生 / 其他 Swing） | SAF tree uri | **未接入** |
-| 索引库 | `~/.grzeb/index.db` | `grzeb-index.db` | 仅内存实现 |
-| 真实检索 | 是 | 是 | 否，直接返回空结果 |
-| 在文件管理器中定位 | 是（`open -R` / `explorer /select,` / `xdg-open`） | 系统无此概念 | 否 |
-
-三端共用同一份 UI，平台差异全收在 `PlatformServices` 这一个接口里
-（`shared/…/platform/PlatformServices.kt:14-43`，`expect fun rememberPlatformServices()` 配三个 actual）。
-Web 端**能构建、能跑、界面完整**，但没有目录访问，`isSupported=false` 时检索短路返回空
-（`shared/…/PlatformServices.wasmJs.kt:19-33`、`core/…/search/SearchEngine.kt:160`）——现在只能当界面演示。
+两端共用同一份 UI，平台差异全收在 `PlatformServices` 这一个接口里
+（`shared/…/platform/PlatformServices.kt:14-43`，`expect fun rememberPlatformServices()` 配两个 actual）。
 
 布局按 M3 窗口尺寸分类分流：断点 600 / 840dp，**按内容宽度判定**。只有展开窗口才并排两栏
 （中等窗口扣掉 400dp 侧栏后列表放不下），侧栏可拖、双击复位（`shared/…/ui/AdaptiveLayout.kt:24-60,77-99`），
@@ -134,10 +125,10 @@ Web 端**能构建、能跑、界面完整**，但没有目录访问，`isSuppor
 ```text
 core/       文件系统抽象 · 解码 · 索引库与预热 · 检索引擎 · 结果树构建器（不含任何 UI 依赖）
 shared/     共用的 Compose UI + PlatformServices（expect / actual）
-desktopApp/ 窗口入口        androidApp/ Activity 入口        webApp/ ComposeViewport 入口
+desktopApp/ 窗口入口        androidApp/ Activity 入口
 ```
 
-依赖只有一条：`shared → core`，三个 app 模块都只依赖 `shared`。
+依赖只有一条：`shared → core`，两个 app 模块都只依赖 `shared`。
 DI 是手工的——`rememberPlatformServices()` 加 `remember {}`，没有 Koin / Hilt。
 
 | 想改的东西 | 去哪儿 |
@@ -162,7 +153,6 @@ DI 是手工的——`rememberPlatformServices()` 加 `remember {}`，没有 Koi
 
 不打算含糊过去的部分：
 
-- **Web 端不能检索**，没有目录访问；只有界面是真的。
 - **iOS 不是当前目标**：`core` 与 `shared` 都还没声明 Kotlin/Native 目标，也没有 `iosMain`。
 - **不支持电子书正文**。`.epub` / `.mobi` / `.fb2` / `.rtf` 在扩展名白名单里，但解析模块还没接：
   epub 是 zip、mobi 是二进制，含 NUL 会在解码第 2 步被判成二进制直接跳过；
