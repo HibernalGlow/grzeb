@@ -1,6 +1,7 @@
 package dev.hibernalglow.grzeb.shared.ui.search
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -36,6 +37,8 @@ import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.input.pointer.PointerIcon
+import androidx.compose.ui.input.pointer.pointerHoverIcon
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
@@ -129,7 +132,10 @@ fun FilePreviewPane(
                 )
             }
             MatchCountBadge(count = file.matchCount, isHighlighted = true)
-            IconButton(onClick = onDismiss) {
+            IconButton(
+                onClick = onDismiss,
+                modifier = Modifier.pointerHoverIcon(PointerIcon.Hand),
+            ) {
                 Icon(
                     imageVector = GrzebIcons.Close,
                     contentDescription = "关闭预览",
@@ -198,6 +204,8 @@ private fun SecondaryActionPill(
         modifier = Modifier
             .clip(MaterialTheme.shapes.small)
             .background(MaterialTheme.colorScheme.surfaceContainerHigh)
+            .border(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f), MaterialTheme.shapes.small)
+            .pointerHoverIcon(PointerIcon.Hand)
             .clickable(onClick = onClick)
             .padding(horizontal = 10.dp, vertical = 6.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -240,7 +248,9 @@ private fun PreviewBody(text: String, file: FileSearchResult, focusLine: Int, mo
     val gutterWidth = remember(lines.size) { (lines.size.toString().length.coerceAtLeast(3) * 8 + 12).dp }
 
     LazyColumn(
-        modifier = modifier.fillMaxSize(),
+        modifier = modifier
+            .fillMaxSize()
+            .pointerHoverIcon(PointerIcon.Text),
         state = listState,
         contentPadding = PaddingValues(vertical = 8.dp),
     ) {

@@ -17,6 +17,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.LinearWavyProgressIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -31,7 +32,7 @@ import dev.hibernalglow.grzeb.core.index.WarmProgress
  * 索引预热状态条。
  *
  * 采用 M3 Expressive 的 [LinearWavyProgressIndicator] 表达后台增量扫描进度，
- * 预热完成后收敛为轻量的就绪状态提示。
+ * 预热完成后收敛为轻量、克制的就绪状态提示。
  */
 @OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
@@ -40,7 +41,7 @@ fun WarmIndicator(
     status: IndexStatus?,
     modifier: Modifier = Modifier,
 ) {
-    val visible = progress != null || status != null
+    val visible = progress != null || status?.isWarmed == true
     AnimatedVisibility(
         visible = visible,
         enter = expandVertically(MaterialTheme.motionScheme.defaultSpatialSpec()) +
@@ -48,48 +49,55 @@ fun WarmIndicator(
         exit = shrinkVertically(MaterialTheme.motionScheme.defaultSpatialSpec()) +
             fadeOut(MaterialTheme.motionScheme.fastEffectsSpec()),
     ) {
-        if (progress != null || status != null) {
-            Column(
+        if (progress != null || status?.isWarmed == true) {
+            Surface(
+                color = MaterialTheme.colorScheme.surfaceContainerLow,
+                shape = MaterialTheme.shapes.small,
                 modifier = modifier
                     .fillMaxWidth()
-                    .background(MaterialTheme.colorScheme.surfaceContainerLow)
-                    .padding(horizontal = 14.dp, vertical = 6.dp),
-                verticalArrangement = Arrangement.spacedBy(6.dp),
+                    .padding(horizontal = 12.dp, vertical = 3.dp),
             ) {
-                if (progress != null) {
-                    LinearWavyProgressIndicator(
-                        modifier = Modifier.fillMaxWidth(),
-                        color = MaterialTheme.colorScheme.tertiary,
-                        trackColor = MaterialTheme.colorScheme.surfaceContainerHighest,
-                    )
-                }
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 12.dp, vertical = 6.dp),
+                    verticalArrangement = Arrangement.spacedBy(6.dp),
                 ) {
-                    Box(
-                        modifier = Modifier
-                            .size(6.dp)
-                            .clip(CircleShape)
-                            .background(
-                                if (progress != null) {
-                                    MaterialTheme.colorScheme.tertiary
-                                } else {
-                                    MaterialTheme.colorScheme.primary
-                                }
-                            ),
-                    )
-                    Text(
-                        text = progress?.let { warmText(it) }
-                            ?: status?.let { "索引就绪 · ${it.fileCount} 个文件 / ${it.textCount} 份正文已缓存" }
-                            .orEmpty(),
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier.weight(1f),
-                    )
+                    if (progress != null) {
+                        LinearWavyProgressIndicator(
+                            modifier = Modifier.fillMaxWidth(),
+                            color = MaterialTheme.colorScheme.tertiary,
+                            trackColor = MaterialTheme.colorScheme.surfaceContainerHighest,
+                        )
+                    }
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(6.dp)
+                                .clip(CircleShape)
+                                .background(
+                                    if (progress != null) {
+                                        MaterialTheme.colorScheme.tertiary
+                                    } else {
+                                        MaterialTheme.colorScheme.primary
+                                    }
+                                ),
+                        )
+                        Text(
+                            text = progress?.let { warmText(it) }
+                                ?: status?.let { "索引就绪 · ${it.fileCount} 个文件 / ${it.textCount} 份正文已缓存" }
+                                .orEmpty(),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.weight(1f),
+                        )
+                    }
                 }
             }
         }

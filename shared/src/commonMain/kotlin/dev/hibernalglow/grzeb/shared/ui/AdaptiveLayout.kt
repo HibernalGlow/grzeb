@@ -20,6 +20,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.input.pointer.PointerIcon
+import androidx.compose.ui.input.pointer.pointerHoverIcon
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -107,6 +109,7 @@ fun PaneResizeHandle(
 
     Box(
         modifier = modifier
+            .pointerHoverIcon(PointerIcon.Crosshair)
             .pointerInput(Unit) {
                 detectHorizontalDragGestures(
                     onDragStart = { isDragging = true },

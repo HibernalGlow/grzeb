@@ -58,6 +58,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.pointer.PointerIcon
+import androidx.compose.ui.input.pointer.pointerHoverIcon
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
@@ -327,7 +329,7 @@ private fun SearchPane(
     }
 }
 
-/** 目录行：独立表面层级 + 文件夹胶囊图标 + 索引状态徽章。 */
+/** 目录行：独立表面层级 + 文件夹胶囊图标 + 索引状态徽章 + 桌面悬停手势。 */
 @Composable
 private fun DirectoryRow(
     isSupported: Boolean,
@@ -344,15 +346,23 @@ private fun DirectoryRow(
             .fillMaxWidth()
             .clip(shape)
             .background(MaterialTheme.colorScheme.surfaceContainer)
-            .border(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f), shape)
-            .clickable(enabled = isSupported, onClick = onPick)
+            .border(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f), shape)
+            .then(
+                if (isSupported) {
+                    Modifier
+                        .pointerHoverIcon(PointerIcon.Hand)
+                        .clickable(onClick = onPick)
+                } else {
+                    Modifier
+                }
+            )
             .padding(horizontal = 12.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(10.dp),
     ) {
         Box(
             modifier = Modifier
-                .size(28.dp)
+                .size(30.dp)
                 .clip(MaterialTheme.shapes.small)
                 .background(
                     if (selected) {
@@ -397,15 +407,14 @@ private fun DirectoryRow(
         }
 
         if (selected) {
-            val hasIndex = indexStatus?.isWarmed == true
             val badgeContainer = when {
                 isWarming -> MaterialTheme.colorScheme.tertiaryContainer
-                hasIndex -> MaterialTheme.colorScheme.primaryContainer
+                indexStatus?.isWarmed == true -> MaterialTheme.colorScheme.primaryContainer
                 else -> MaterialTheme.colorScheme.surfaceContainerHighest
             }
             val badgeContent = when {
                 isWarming -> MaterialTheme.colorScheme.onTertiaryContainer
-                hasIndex -> MaterialTheme.colorScheme.onPrimaryContainer
+                indexStatus?.isWarmed == true -> MaterialTheme.colorScheme.onPrimaryContainer
                 else -> MaterialTheme.colorScheme.onSurfaceVariant
             }
             val badgeText = when {
@@ -433,6 +442,7 @@ private fun DirectoryRow(
                     .size(26.dp)
                     .clip(CircleShape)
                     .background(MaterialTheme.colorScheme.surfaceContainerHighest)
+                    .pointerHoverIcon(PointerIcon.Hand)
                     .clickable(onClick = onClear),
                 contentAlignment = Alignment.Center,
             ) {
@@ -472,7 +482,7 @@ private fun SearchRow(
             shape = MaterialTheme.shapes.large,
             placeholder = {
                 Text(
-                    text = "输入关键词或正则表达式...",
+                    text = "输入关键词或正则表达式... (Enter 开始搜索)",
                     style = MaterialTheme.typography.bodyMedium,
                 )
             },
@@ -486,7 +496,10 @@ private fun SearchRow(
             },
             trailingIcon = {
                 if (query.isNotEmpty() && !isSearching) {
-                    IconButton(onClick = { onQueryChange("") }) {
+                    IconButton(
+                        onClick = { onQueryChange("") },
+                        modifier = Modifier.pointerHoverIcon(PointerIcon.Hand),
+                    ) {
                         Icon(
                             imageVector = GrzebIcons.Close,
                             contentDescription = "清空输入",
@@ -535,6 +548,7 @@ private fun SearchRow(
                 containerColor = buttonContainerColor,
                 contentColor = buttonContentColor,
             ),
+            modifier = Modifier.pointerHoverIcon(PointerIcon.Hand),
         ) {
             AnimatedContent(
                 targetState = isSearching,
@@ -582,6 +596,7 @@ private fun OptionsSection(isOpen: Boolean, onToggle: () -> Unit, state: SearchU
         Row(
             modifier = Modifier
                 .clip(MaterialTheme.shapes.small)
+                .pointerHoverIcon(PointerIcon.Hand)
                 .clickable(onClick = onToggle)
                 .padding(horizontal = 6.dp, vertical = 4.dp),
             verticalAlignment = Alignment.CenterVertically,
@@ -690,6 +705,7 @@ private fun OptionsSection(isOpen: Boolean, onToggle: () -> Unit, state: SearchU
                     selected = false,
                     onClick = { state.showSettings = true },
                     shape = MaterialTheme.shapes.small,
+                    modifier = Modifier.pointerHoverIcon(PointerIcon.Hand),
                     leadingIcon = {
                         Icon(
                             imageVector = GrzebIcons.Settings,
@@ -728,6 +744,7 @@ private fun SearchOptionChip(
         selected = selected,
         onClick = onClick,
         shape = MaterialTheme.shapes.small,
+        modifier = Modifier.pointerHoverIcon(PointerIcon.Hand),
         leadingIcon = {
             AnimatedContent(
                 targetState = selected,
@@ -773,65 +790,96 @@ private fun SearchOptionChip(
 }
 
 /**
- * 进度区：使用 M3 Expressive 的 [LinearWavyProgressIndicator] 表达不确定进度的扫描状态。
+ * 进度区：使用 M3 Expressive 的 [LinearWavyProgressIndicator] 表达平滑波浪进度的扫描状态。
  */
 @OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 private fun ProgressArea(progress: SearchProgress) {
-    Column(
+    Surface(
+        color = MaterialTheme.colorScheme.surfaceContainerLow,
+        shape = MaterialTheme.shapes.small,
         modifier = Modifier
             .fillMaxWidth()
-            .background(MaterialTheme.colorScheme.surfaceContainerLow)
-            .padding(horizontal = 14.dp, vertical = 8.dp),
-        verticalArrangement = Arrangement.spacedBy(6.dp),
+            .padding(horizontal = 12.dp, vertical = 4.dp),
     ) {
-        LinearWavyProgressIndicator(
-            modifier = Modifier.fillMaxWidth(),
-            color = MaterialTheme.colorScheme.primary,
-            trackColor = MaterialTheme.colorScheme.surfaceContainerHighest,
-        )
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 12.dp, vertical = 8.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp),
         ) {
-            Text(
-                text = progress.currentFile?.let { "正在检索: $it" } ?: "准备中...",
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.weight(1f),
-            )
-            Text(
-                text = "${progress.scannedFiles} 文件 · ${progress.totalMatches} 命中",
-                style = MaterialTheme.typography.labelSmall,
+            LinearWavyProgressIndicator(
+                modifier = Modifier.fillMaxWidth(),
                 color = MaterialTheme.colorScheme.primary,
+                trackColor = MaterialTheme.colorScheme.surfaceContainerHighest,
             )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                Text(
+                    text = progress.currentFile?.let { "正在检索: $it" } ?: "准备中...",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f),
+                )
+                Box(
+                    modifier = Modifier
+                        .clip(CircleShape)
+                        .background(MaterialTheme.colorScheme.primaryContainer)
+                        .padding(horizontal = 8.dp, vertical = 2.dp),
+                ) {
+                    Text(
+                        text = "${progress.scannedFiles} 文件 · ${progress.totalMatches} 命中",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onPrimaryContainer,
+                    )
+                }
+            }
         }
     }
 }
 
-/** 结果统计条。 */
+/** 结果统计条：紧凑 M3E 胶囊徽章 + 动作按钮。 */
 @Composable
 private fun ResultSummary(fileCount: Int, matchCount: Int, onClear: () -> Unit) {
-    Row(
+    Surface(
+        color = MaterialTheme.colorScheme.surfaceContainer,
+        shape = MaterialTheme.shapes.small,
         modifier = Modifier
             .fillMaxWidth()
-            .background(MaterialTheme.colorScheme.surfaceContainer)
-            .padding(start = 14.dp, end = 6.dp, top = 4.dp, bottom = 4.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
+            .padding(horizontal = 12.dp, vertical = 4.dp),
     ) {
-        Text(
-            text = "找到 $fileCount 个文件",
-            style = MaterialTheme.typography.labelMedium,
-            color = MaterialTheme.colorScheme.onSurface,
-        )
-        MatchCountBadge(count = matchCount, isHighlighted = true)
-        Spacer(Modifier.weight(1f))
-        TextButton(onClick = onClear) {
-            Text("清空结果", style = MaterialTheme.typography.labelSmall)
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(start = 12.dp, end = 6.dp, top = 4.dp, bottom = 4.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Box(
+                modifier = Modifier
+                    .clip(CircleShape)
+                    .background(MaterialTheme.colorScheme.secondaryContainer)
+                    .padding(horizontal = 8.dp, vertical = 2.dp),
+            ) {
+                Text(
+                    text = "命中 $fileCount 个文件",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSecondaryContainer,
+                )
+            }
+            MatchCountBadge(count = matchCount, isHighlighted = true)
+            Spacer(Modifier.weight(1f))
+            TextButton(
+                onClick = onClear,
+                modifier = Modifier.pointerHoverIcon(PointerIcon.Hand),
+            ) {
+                Text("清空结果", style = MaterialTheme.typography.labelSmall)
+            }
         }
     }
 }

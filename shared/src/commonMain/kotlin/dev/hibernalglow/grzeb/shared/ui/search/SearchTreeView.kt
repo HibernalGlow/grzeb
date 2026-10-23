@@ -36,6 +36,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.pointer.PointerIcon
+import androidx.compose.ui.input.pointer.pointerHoverIcon
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -48,7 +50,7 @@ import dev.hibernalglow.grzeb.shared.ui.GrzebIcons
 /**
  * 面包屑：整棵树的根 → 当前 scope，每一节都能点回去。
  *
- * 采用胶囊表面层级区分可回退节点与当前所在节点。
+ * 采用胶囊表面层级区分可回退节点与当前所在节点，并支持桌面光标提示与平滑弹簧动效。
  */
 @Composable
 fun ScopeBreadcrumb(
@@ -70,9 +72,10 @@ fun ScopeBreadcrumb(
         if (path.size > 1) {
             Box(
                 modifier = Modifier
-                    .size(22.dp)
+                    .size(24.dp)
                     .clip(CircleShape)
                     .background(MaterialTheme.colorScheme.surfaceContainerHighest)
+                    .pointerHoverIcon(PointerIcon.Hand)
                     .clickable { onNavigate(path[path.size - 2]) },
                 contentAlignment = Alignment.Center,
             ) {
@@ -89,6 +92,7 @@ fun ScopeBreadcrumb(
 
         path.forEachIndexed { index, segment ->
             val isCurrent = index == path.lastIndex
+            val isRoot = index == 0
             Box(
                 modifier = Modifier
                     .clip(MaterialTheme.shapes.extraSmall)
@@ -99,28 +103,53 @@ fun ScopeBreadcrumb(
                             Color.Transparent
                         }
                     )
-                    .clickable(enabled = !isCurrent) { onNavigate(segment) }
-                    .padding(horizontal = 6.dp, vertical = 2.dp),
+                    .then(
+                        if (!isCurrent) {
+                            Modifier
+                                .pointerHoverIcon(PointerIcon.Hand)
+                                .clickable { onNavigate(segment) }
+                        } else {
+                            Modifier
+                        }
+                    )
+                    .padding(horizontal = 7.dp, vertical = 3.dp),
             ) {
-                Text(
-                    text = segment.name,
-                    style = MaterialTheme.typography.labelMedium.copy(
-                        fontWeight = if (isCurrent) FontWeight.SemiBold else FontWeight.Medium,
-                    ),
-                    color = if (isCurrent) {
-                        MaterialTheme.colorScheme.onSecondaryContainer
-                    } else {
-                        MaterialTheme.colorScheme.primary
-                    },
-                    maxLines = 1,
-                )
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                ) {
+                    if (isRoot) {
+                        Icon(
+                            imageVector = GrzebIcons.Folder,
+                            contentDescription = null,
+                            modifier = Modifier.size(12.dp),
+                            tint = if (isCurrent) {
+                                MaterialTheme.colorScheme.onSecondaryContainer
+                            } else {
+                                MaterialTheme.colorScheme.primary
+                            },
+                        )
+                    }
+                    Text(
+                        text = segment.name,
+                        style = MaterialTheme.typography.labelMedium.copy(
+                            fontWeight = if (isCurrent) FontWeight.SemiBold else FontWeight.Medium,
+                        ),
+                        color = if (isCurrent) {
+                            MaterialTheme.colorScheme.onSecondaryContainer
+                        } else {
+                            MaterialTheme.colorScheme.primary
+                        },
+                        maxLines = 1,
+                    )
+                }
             }
 
             if (!isCurrent) {
                 Text(
                     text = "›",
                     style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
                 )
             }
         }
@@ -226,6 +255,7 @@ private fun FolderRow(
             .fillMaxWidth()
             .padding(vertical = 1.dp)
             .clip(MaterialTheme.shapes.small)
+            .pointerHoverIcon(PointerIcon.Hand)
             .clickable(onClick = onDrill)
             .padding(start = indent(depth), top = 7.dp, bottom = 7.dp, end = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -286,6 +316,7 @@ private fun FileRow(
                 .padding(vertical = 1.dp)
                 .clip(MaterialTheme.shapes.small)
                 .background(rowContainerColor)
+                .pointerHoverIcon(PointerIcon.Hand)
                 .clickable(onClick = select)
                 .padding(start = indent(depth), top = 7.dp, bottom = 7.dp, end = 8.dp),
             verticalAlignment = Alignment.CenterVertically,
@@ -355,6 +386,7 @@ private fun Caret(visible: Boolean, isExpanded: Boolean, onClick: () -> Unit) {
         modifier = Modifier
             .size(20.dp)
             .clip(CircleShape)
+            .pointerHoverIcon(PointerIcon.Hand)
             .clickable(onClick = onClick),
         contentAlignment = Alignment.Center,
     ) {

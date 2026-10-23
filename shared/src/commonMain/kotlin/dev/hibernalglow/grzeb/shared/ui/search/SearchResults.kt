@@ -33,6 +33,8 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.input.pointer.PointerIcon
+import androidx.compose.ui.input.pointer.pointerHoverIcon
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontFamily
@@ -133,7 +135,15 @@ private fun SearchResultCard(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .clickable(enabled = collapsible) { isOpen = !isOpen }
+                    .then(
+                        if (collapsible) {
+                            Modifier
+                                .pointerHoverIcon(PointerIcon.Hand)
+                                .clickable { isOpen = !isOpen }
+                        } else {
+                            Modifier
+                        }
+                    )
                     .padding(12.dp),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -229,6 +239,7 @@ internal fun MatchPreview(match: SearchMatch, onClick: () -> Unit) {
                     cornerRadius = CornerRadius(barWidth, barWidth),
                 )
             }
+            .pointerHoverIcon(PointerIcon.Hand)
             .clickable(onClick = onClick)
             .padding(start = 10.dp, end = 8.dp, top = 6.dp, bottom = 6.dp),
     ) {
