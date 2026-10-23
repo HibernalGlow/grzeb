@@ -180,6 +180,8 @@ fun SearchResultTree(
     onToggleFile: (String) -> Unit,
     onDrill: (String) -> Unit,
     onSelect: (FileSearchResult, SearchMatch) -> Unit,
+    onExpandAll: () -> Unit = {},
+    onCollapseAll: () -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     if (node == null) {
@@ -193,7 +195,7 @@ fun SearchResultTree(
     val rows = remember(node, collapsedFolders) { flatten(node, collapsedFolders) }
 
     Column(modifier.fillMaxSize()) {
-        ScopeSummary(node, isLoading)
+        ScopeSummary(node, isLoading, onExpandAll, onCollapseAll)
 
         LazyColumn(
             modifier = Modifier.fillMaxSize(),
@@ -224,21 +226,67 @@ fun SearchResultTree(
     }
 }
 
-/** 当前 scope 的一行小计。 */
+/** 当前 scope 的一行小计与快捷全部展开/折叠。 */
 @Composable
-private fun ScopeSummary(node: SearchTreeNode, isLoading: Boolean) {
-    Text(
-        text = if (isLoading) {
-            "检索中… 已找到 ${node.fileCount} 个文件 · ${node.matchCount} 处命中"
-        } else {
-            "当前范围：${node.fileCount} 个文件 · ${node.matchCount} 处命中"
-        },
-        style = MaterialTheme.typography.labelSmall,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
+private fun ScopeSummary(
+    node: SearchTreeNode,
+    isLoading: Boolean,
+    onExpandAll: () -> Unit,
+    onCollapseAll: () -> Unit,
+) {
+    Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(start = 14.dp, top = 8.dp, bottom = 4.dp),
-    )
+            .padding(horizontal = 14.dp, vertical = 6.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.SpaceBetween,
+    ) {
+        Text(
+            text = if (isLoading) {
+                "检索中… 已找到 ${node.fileCount} 个文件 · ${node.matchCount} 处命中"
+            } else {
+                "${node.fileCount} 个文件 · ${node.matchCount} 处匹配"
+            },
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.weight(1f),
+        )
+
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(4.dp),
+        ) {
+            Box(
+                modifier = Modifier
+                    .clip(MaterialTheme.shapes.extraSmall)
+                    .background(MaterialTheme.colorScheme.surfaceContainerHighest)
+                    .pointerHoverIcon(PointerIcon.Hand)
+                    .clickable(onClick = onExpandAll)
+                    .padding(horizontal = 7.dp, vertical = 2.dp),
+            ) {
+                Text(
+                    text = "全部展开",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.primary,
+                )
+            }
+
+            Box(
+                modifier = Modifier
+                    .clip(MaterialTheme.shapes.extraSmall)
+                    .background(MaterialTheme.colorScheme.surfaceContainerHighest)
+                    .pointerHoverIcon(PointerIcon.Hand)
+                    .clickable(onClick = onCollapseAll)
+                    .padding(horizontal = 7.dp, vertical = 2.dp),
+            ) {
+                Text(
+                    text = "全部折叠",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
+    }
 }
 
 @Composable
@@ -256,7 +304,7 @@ private fun FolderRow(
             .padding(vertical = 1.dp)
             .clip(MaterialTheme.shapes.small)
             .pointerHoverIcon(PointerIcon.Hand)
-            .clickable(onClick = onDrill)
+            .clickable(onClick = onToggleExpand)
             .padding(start = indent(depth), top = 7.dp, bottom = 7.dp, end = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(6.dp),
@@ -270,13 +318,13 @@ private fun FolderRow(
         )
         Text(
             text = node.name,
-            style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Medium),
+            style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold),
             color = MaterialTheme.colorScheme.onSurface,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
             modifier = Modifier.weight(1f),
         )
-        MatchCountBadge(count = node.fileCount, isHighlighted = false)
+        MatchCountBadge(count = node.matchCount.takeIf { it > 0 } ?: node.fileCount, isHighlighted = false)
     }
 }
 
@@ -337,16 +385,31 @@ private fun FileRow(
                     MaterialTheme.colorScheme.onSurfaceVariant
                 },
             )
-            Text(
-                text = node.name,
-                style = MaterialTheme.typography.bodyMedium.copy(
-                    fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal,
-                ),
-                color = rowContentColor,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
+            Row(
                 modifier = Modifier.weight(1f),
-            )
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+                Text(
+                    text = node.name,
+                    style = MaterialTheme.typography.bodyMedium.copy(
+                        fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal,
+                    ),
+                    color = rowContentColor,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                val dirPart = node.relPath?.substringBeforeLast('/', "")?.ifEmpty { null }
+                if (dirPart != null && dirPart != node.name) {
+                    Text(
+                        text = dirPart,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.65f),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
+            }
             MatchCountBadge(count = node.matchCount, isHighlighted = true)
         }
 
@@ -406,10 +469,11 @@ private fun indent(depth: Int) = (8 + depth * 14).dp
 /** 把树上的文件节点还原成检索结果，交给预览面板（它只认 [FileSearchResult]）。 */
 private fun asResult(node: SearchTreeNode) = FileSearchResult(
     uri = node.uri,
-    relPath = node.name,
+    relPath = node.relPath ?: node.name,
     isDirectory = false,
     matches = node.matches,
     matchCount = node.matchCount,
+    rootUri = node.rootUri,
 )
 
 private data class TreeRow(val node: SearchTreeNode, val depth: Int)
