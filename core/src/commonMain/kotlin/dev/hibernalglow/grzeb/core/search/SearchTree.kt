@@ -20,6 +20,8 @@ data class SearchTreeNode(
     /** 文件节点自己的命中；目录节点为空。 */
     val matches: List<SearchMatch> = emptyList(),
     val children: List<SearchTreeNode> = emptyList(),
+    val rootUri: String? = null,
+    val relPath: String? = null,
 ) {
     val isFile: Boolean get() = !isDirectory
 }
@@ -31,20 +33,17 @@ data class ScopePath(
 )
 
 /**
- * 把扁平结果整理成"可钻取的结果树"。
+ * 把扁平结果整理成"类似 VSCode 的分层结果树"。
  *
- * 目录层级不是从结果里猜的，而是查索引库的 `parentUri` 链 —— 这样平台无关
- * （Android 的 SAF URI 与桌面的绝对路径都能用），而且不依赖检索引擎改动。
- *
- * 三个约定：
- * - **只保留落在当前 scope 里的命中**：钻到 `crates/renderer` 后，树里不会混进 `app/` 的结果。
- * - **位置未知的文件直接挂在 scope 下**：索引还没热完就搜索时，某些文件不在库里，
- *   上溯不出位置。这时宁可把它平铺在 scope 下，也不能丢。
- * - **目录在前、其余按名字排**：与文件系统实现里的顺序一致。
+ * 支持：
+ * - 多工作区根目录并行检索与层级聚合；
+ * - 结合 SQLite 缓存或根据文件相对路径 [relPath] 自动解析多层目录结构；
+ * - 始终呈现清晰、可就地折叠/展开与下钻的树形体验，告别扁平列表。
  */
 class SearchTreeBuilder(
-    private val store: IndexStore,
+    private val store: IndexStore? = null,
     private val treeUri: String,
+    private val rootDisplayNames: Map<String, String> = emptyMap(),
 ) {
 
     /**
@@ -54,59 +53,193 @@ class SearchTreeBuilder(
      * 子目录与文件。
      */
     suspend fun build(results: List<FileSearchResult>, scopeUri: String): SearchTreeNode {
-        val entries = store.entries(treeUri).associateBy { it.uri }
+        val distinctRoots = results.mapNotNull { it.rootUri }.distinct()
+        val isMultiRoot = treeUri == MULTI_ROOT_URI || (distinctRoots.size > 1 && scopeUri == MULTI_ROOT_URI)
 
-        // 目录 uri → 子节点；自底向上建，最后再算计数
-        val folderChildren = mutableMapOf<String, MutableList<SearchTreeNode>>()
+        if (isMultiRoot && scopeUri == MULTI_ROOT_URI) {
+            // 多工作区模式顶层：为每个根目录创建子树
+            val groupedByRoot = results.groupBy { it.rootUri ?: treeUri }
+            val rootChildren = mutableListOf<SearchTreeNode>()
 
-        for (result in results) {
-            val chain = folderChain(entries, result.uri, scopeUri) ?: continue
-
-            var parent = scopeUri
-            for (folderUri in chain) {
-                val siblings = folderChildren.getOrPut(parent) { mutableListOf() }
-                if (siblings.none { it.uri == folderUri }) {
-                    siblings += SearchTreeNode(
-                        uri = folderUri,
-                        name = entries[folderUri]?.name ?: folderUri.substringAfterLast('/'),
-                        isDirectory = true,
-                        fileCount = 0,
-                        matchCount = 0,
-                    )
-                }
-                parent = folderUri
+            for ((root, rootResults) in groupedByRoot) {
+                val rootName = rootDisplayNames[root] ?: root.substringAfterLast('/').ifEmpty { root }
+                val rootSubtree = buildSingleRoot(rootResults, root, root, rootName)
+                rootChildren += rootSubtree
             }
-            folderChildren.getOrPut(parent) { mutableListOf() } += SearchTreeNode(
-                uri = result.uri,
-                name = result.relPath,
-                isDirectory = false,
-                fileCount = 1,
-                matchCount = result.matchCount,
-                matches = result.matches,
+
+            rootChildren.sortWith(
+                compareByDescending<SearchTreeNode> { it.isDirectory }.thenBy { it.name.lowercase() }
+            )
+
+            return SearchTreeNode(
+                uri = MULTI_ROOT_URI,
+                name = "工作区",
+                isDirectory = true,
+                fileCount = rootChildren.sumOf { it.fileCount },
+                matchCount = rootChildren.sumOf { it.matchCount },
+                children = rootChildren,
             )
         }
 
-        return assemble(scopeUri, entries[scopeUri]?.name, folderChildren)
+        // 单工作区或已钻入某一特定根目录/子目录
+        val currentRoot = if (isMultiRoot) {
+            distinctRoots.firstOrNull { scopeUri.startsWith(it) } ?: treeUri
+        } else {
+            treeUri
+        }
+        val rootName = rootDisplayNames[currentRoot] ?: currentRoot.substringAfterLast('/').ifEmpty { currentRoot }
+        return buildSingleRoot(results, currentRoot, scopeUri, rootName)
+    }
+
+    private suspend fun buildSingleRoot(
+        results: List<FileSearchResult>,
+        rootUri: String,
+        scopeUri: String,
+        rootDisplayName: String?,
+    ): SearchTreeNode {
+        val entries = store?.entries(rootUri)?.associateBy { it.uri }.orEmpty()
+
+        // 目录 uri → 子节点；自底向上建，最后再算计数
+        val folderChildren = mutableMapOf<String, MutableList<SearchTreeNode>>()
+        val folderNames = mutableMapOf<String, String>()
+
+        for (result in results) {
+            // 如果指定了 rootUri，且结果显式带着其它 rootUri，则跳过
+            if (result.rootUri != null && result.rootUri != rootUri && rootUri != MULTI_ROOT_URI) {
+                continue
+            }
+
+            // 1. 优先查索引库链条
+            val dbChain = folderChain(entries, result.uri, scopeUri)
+
+            if (dbChain != null && dbChain.isNotEmpty()) {
+                var parent = scopeUri
+                for (folderUri in dbChain) {
+                    val siblings = folderChildren.getOrPut(parent) { mutableListOf() }
+                    val name = entries[folderUri]?.name ?: folderUri.substringAfterLast('/')
+                    folderNames[folderUri] = name
+                    if (siblings.none { it.uri == folderUri }) {
+                        siblings += SearchTreeNode(
+                            uri = folderUri,
+                            name = name,
+                            isDirectory = true,
+                            fileCount = 0,
+                            matchCount = 0,
+                            rootUri = rootUri,
+                        )
+                    }
+                    parent = folderUri
+                }
+                val fileName = entries[result.uri]?.name ?: result.relPath.substringAfterLast('/')
+                folderChildren.getOrPut(parent) { mutableListOf() } += SearchTreeNode(
+                    uri = result.uri,
+                    name = fileName,
+                    isDirectory = false,
+                    fileCount = 1,
+                    matchCount = result.matchCount,
+                    matches = result.matches,
+                    rootUri = rootUri,
+                    relPath = result.relPath,
+                )
+            } else if (dbChain != null && dbChain.isEmpty()) {
+                // dbChain 为空：可能是文件就在当前 scope 根下，或者未预热根据 relPath 拆分目录
+                val normalizedRelPath = result.relPath.replace('\\', '/').trim('/')
+                val parts = normalizedRelPath.split('/').filter { it.isNotEmpty() }
+
+                if (parts.size > 1 && scopeUri == rootUri) {
+                    // 根据相对路径分级展示多层目录结构
+                    var parent = scopeUri
+                    val dirParts = parts.dropLast(1)
+                    val fileName = parts.last()
+
+                    var pathAcc = scopeUri
+                    for (part in dirParts) {
+                        pathAcc = if (pathAcc.endsWith('/')) "$pathAcc$part" else "$pathAcc/$part"
+                        val folderUri = pathAcc
+                        folderNames[folderUri] = part
+                        val siblings = folderChildren.getOrPut(parent) { mutableListOf() }
+                        if (siblings.none { it.uri == folderUri }) {
+                            siblings += SearchTreeNode(
+                                uri = folderUri,
+                                name = part,
+                                isDirectory = true,
+                                fileCount = 0,
+                                matchCount = 0,
+                                rootUri = rootUri,
+                            )
+                        }
+                        parent = folderUri
+                    }
+
+                    folderChildren.getOrPut(parent) { mutableListOf() } += SearchTreeNode(
+                        uri = result.uri,
+                        name = fileName,
+                        isDirectory = false,
+                        fileCount = 1,
+                        matchCount = result.matchCount,
+                        matches = result.matches,
+                        rootUri = rootUri,
+                        relPath = result.relPath,
+                    )
+                } else {
+                    // 文件直属当前 scope
+                    val fileName = parts.lastOrNull() ?: result.relPath
+                    folderChildren.getOrPut(scopeUri) { mutableListOf() } += SearchTreeNode(
+                        uri = result.uri,
+                        name = fileName,
+                        isDirectory = false,
+                        fileCount = 1,
+                        matchCount = result.matchCount,
+                        matches = result.matches,
+                        rootUri = rootUri,
+                        relPath = result.relPath,
+                    )
+                }
+            }
+        }
+
+        val scopeName = if (scopeUri == rootUri) {
+            rootDisplayName ?: entries[scopeUri]?.name ?: scopeUri.substringAfterLast('/')
+        } else {
+            folderNames[scopeUri] ?: entries[scopeUri]?.name ?: scopeUri.substringAfterLast('/')
+        }
+
+        return assemble(scopeUri, scopeName, folderChildren, rootUri)
     }
 
     /** 从整棵树的根到 [scopeUri] 的链路，顺序是 根 → 当前（面包屑直接用）。 */
     suspend fun scopePath(scopeUri: String): List<ScopePath> {
-        val entries = store.entries(treeUri).associateBy { it.uri }
+        if (scopeUri == MULTI_ROOT_URI) {
+            return listOf(ScopePath(MULTI_ROOT_URI, "工作区"))
+        }
+
+        val entries = store?.entries(treeUri)?.associateBy { it.uri }.orEmpty()
         val path = mutableListOf<ScopePath>()
 
         var cursor: String? = scopeUri
         var guard = 0
         while (cursor != null && guard++ < MAX_DEPTH) {
-            path += ScopePath(cursor, entries[cursor]?.name ?: cursor.substringAfterLast('/'))
+            val name = if (cursor == treeUri) {
+                rootDisplayNames[cursor] ?: cursor.substringAfterLast('/').ifEmpty { cursor }
+            } else {
+                entries[cursor]?.name ?: cursor.substringAfterLast('/')
+            }
+            path += ScopePath(cursor, name)
             if (cursor == treeUri) break
             cursor = entries[cursor]?.parentUri
         }
 
         path.reverse()
-        if (path.firstOrNull()?.uri != treeUri) {
+        if (path.firstOrNull()?.uri != treeUri && treeUri != MULTI_ROOT_URI) {
             // 链路断在库里没有的目录上：补上整棵树的根，别让面包屑少一截
-            path.add(0, ScopePath(treeUri, entries[treeUri]?.name ?: treeUri.substringAfterLast('/')))
+            val rootName = rootDisplayNames[treeUri] ?: treeUri.substringAfterLast('/').ifEmpty { treeUri }
+            path.add(0, ScopePath(treeUri, rootName))
         }
+
+        if (treeUri == MULTI_ROOT_URI) {
+            path.add(0, ScopePath(MULTI_ROOT_URI, "工作区"))
+        }
+
         return path
     }
 
@@ -115,10 +248,11 @@ class SearchTreeBuilder(
         uri: String,
         name: String?,
         folderChildren: Map<String, List<SearchTreeNode>>,
+        rootUri: String,
     ): SearchTreeNode {
         val children = folderChildren[uri].orEmpty().map { child ->
             if (child.isDirectory) {
-                assemble(child.uri, child.name, folderChildren)
+                assemble(child.uri, child.name, folderChildren, rootUri)
             } else {
                 child
             }
@@ -133,6 +267,7 @@ class SearchTreeBuilder(
             fileCount = children.sumOf { it.fileCount },
             matchCount = children.sumOf { it.matchCount },
             children = children,
+            rootUri = rootUri,
         )
     }
 
@@ -161,8 +296,10 @@ class SearchTreeBuilder(
         return null
     }
 
-    private companion object {
+    companion object {
+        const val MULTI_ROOT_URI = "grzeb://workspace"
+
         /** 目录层数上限，纯粹是防库里出现环导致的死循环。 */
-        const val MAX_DEPTH = 64
+        private const val MAX_DEPTH = 64
     }
 }

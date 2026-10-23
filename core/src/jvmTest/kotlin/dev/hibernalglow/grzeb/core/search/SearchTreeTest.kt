@@ -117,4 +117,65 @@ class SearchTreeTest {
         assertEquals(listOf("刘备"), builder.scopePath(root).map { it.name })
         assertEquals(listOf(root, apr), builder.scopePath(apr).map { it.uri })
     }
+
+    @Test
+    fun buildsFolderHierarchyFromRelPathEvenWithoutStore() = runBlocking {
+        val emptyStore = InMemoryIndexStore()
+        val customRoot = "file:///workspace"
+        val results = listOf(
+            result("$customRoot/src/main/App.kt", "src/main/App.kt", 3),
+            result("$customRoot/src/test/AppTest.kt", "src/test/AppTest.kt", 2),
+            result("$customRoot/build.gradle.kts", "build.gradle.kts", 1),
+        )
+
+        val tree = SearchTreeBuilder(emptyStore, customRoot).build(results, customRoot)
+
+        assertEquals(3, tree.fileCount)
+        assertEquals(6, tree.matchCount)
+        // 顶层包含目录 src 和文件 build.gradle.kts
+        assertEquals(listOf("src", "build.gradle.kts"), tree.children.map { it.name })
+
+        val src = tree.children.first { it.name == "src" }
+        assertTrue(src.isDirectory)
+        assertEquals(listOf("main", "test"), src.children.map { it.name })
+
+        val main = src.children.first { it.name == "main" }
+        assertEquals(listOf("App.kt"), main.children.map { it.name })
+        assertEquals("src/main/App.kt", main.children.first().relPath)
+    }
+
+    @Test
+    fun buildsMultiRootWorkspaceTree() = runBlocking {
+        val rootA = "file:///workspace/project-a"
+        val rootB = "file:///workspace/project-b"
+        val results = listOf(
+            FileSearchResult(
+                uri = "$rootA/src/Main.kt",
+                relPath = "src/Main.kt",
+                matchCount = 4,
+                rootUri = rootA,
+            ),
+            FileSearchResult(
+                uri = "$rootB/lib/Utils.kt",
+                relPath = "lib/Utils.kt",
+                matchCount = 5,
+                rootUri = rootB,
+            ),
+        )
+
+        val builder = SearchTreeBuilder(
+            store = null,
+            treeUri = SearchTreeBuilder.MULTI_ROOT_URI,
+            rootDisplayNames = mapOf(rootA to "项目 A", rootB to "项目 B"),
+        )
+        val tree = builder.build(results, SearchTreeBuilder.MULTI_ROOT_URI)
+
+        assertEquals(2, tree.fileCount)
+        assertEquals(9, tree.matchCount)
+        assertEquals(listOf("项目 A", "项目 B"), tree.children.map { it.name })
+
+        val projectA = tree.children.first { it.name == "项目 A" }
+        assertTrue(projectA.isDirectory)
+        assertEquals("src", projectA.children.first().name)
+    }
 }

@@ -90,6 +90,8 @@ data class FileSearchResult(
     val size: Long? = null,
     val matches: List<SearchMatch> = emptyList(),
     val matchCount: Int = 0,
+    val rootUri: String? = null,
+    val rootName: String? = null,
 )
 
 /** 检索进度。 */
@@ -168,11 +170,11 @@ class SearchEngine(
         // 结果、进度来自多条协程，用锁串起来；顺带保证回调不会并发进 UI
         val lock = Mutex()
 
-        suspend fun scanFile(entry: FileEntry, depth: Int) {
+        suspend fun scanFile(entry: FileEntry, depth: Int, relPath: String) {
             currentCoroutineContext().ensureActive()
             val content = io.withPermit { fileSystem.readText(entry.uri) }
             val fileResult = content?.let {
-                searchInContent(entry.uri, entry.name, entry.size, it, plan)
+                searchInContent(entry.uri, relPath, entry.size, it, plan, rootUri)
             }
 
             lock.withLock {
@@ -193,7 +195,7 @@ class SearchEngine(
             }
         }
 
-        suspend fun walk(uri: String, depth: Int) {
+        suspend fun walk(uri: String, depth: Int, parentRelPath: String = "") {
             currentCoroutineContext().ensureActive()
             if (depth > options.maxDepth) return
 
@@ -223,18 +225,22 @@ class SearchEngine(
                         if (from >= to) continue
                         val slice = files.subList(from, to)
                         launch {
-                            for (file in slice) scanFile(file, depth)
+                            for (file in slice) {
+                                val fileRelPath = if (parentRelPath.isEmpty()) file.name else "$parentRelPath/${file.name}"
+                                scanFile(file, depth, fileRelPath)
+                            }
                         }
                     }
                 }
 
                 for (directory in subdirectories) {
-                    launch { walk(directory.uri, depth + 1) }
+                    val subRelPath = if (parentRelPath.isEmpty()) directory.name else "$parentRelPath/${directory.name}"
+                    launch { walk(directory.uri, depth + 1, subRelPath) }
                 }
             }
         }
 
-        walk(rootUri, 0)
+        walk(rootUri, 0, "")
 
         lock.withLock {
             callbacks.onProgress(
@@ -252,10 +258,11 @@ class SearchEngine(
 
     private fun searchInContent(
         uri: String,
-        name: String,
+        relPath: String,
         size: Long?,
         content: String,
         plan: SearchQuery,
+        rootUri: String? = null,
     ): FileSearchResult? {
         // 排除词命中任一处，整份文件出局。先判它，省掉下面的按行切分
         if (plan.excludes.any { it.containsMatchIn(content) }) return null
@@ -292,10 +299,11 @@ class SearchEngine(
 
         return FileSearchResult(
             uri = uri,
-            relPath = name,
+            relPath = relPath,
             size = size,
             matches = found,
             matchCount = found.size,
+            rootUri = rootUri,
         )
     }
 
