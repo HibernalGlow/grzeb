@@ -66,59 +66,63 @@ fun GrzebApp() {
                                     verticalAlignment = Alignment.CenterVertically,
                                     horizontalArrangement = Arrangement.spacedBy(10.dp),
                                 ) {
-                                    // M3E 品牌前缀胶囊图标
+                                    // Rhythm 风格品牌徽章胶囊
                                     Box(
                                         modifier = Modifier
-                                            .size(30.dp)
-                                            .clip(MaterialTheme.shapes.small)
+                                            .size(36.dp)
+                                            .clip(CircleShape)
                                             .background(MaterialTheme.colorScheme.primaryContainer),
                                         contentAlignment = Alignment.Center,
                                     ) {
                                         Icon(
                                             imageVector = GrzebIcons.Search,
                                             contentDescription = null,
-                                            modifier = Modifier.size(16.dp),
+                                            modifier = Modifier.size(18.dp),
                                             tint = MaterialTheme.colorScheme.onPrimaryContainer,
                                         )
                                     }
                                     Text(
                                         text = "grzeb",
                                         style = MaterialTheme.typography.titleLarge.copy(
-                                            fontWeight = FontWeight.Bold,
+                                            fontWeight = FontWeight.Black,
                                         ),
-                                        color = MaterialTheme.colorScheme.primary,
+                                        color = MaterialTheme.colorScheme.onSurface,
                                     )
                                     Box(
                                         modifier = Modifier
                                             .clip(CircleShape)
                                             .background(MaterialTheme.colorScheme.secondaryContainer)
-                                            .padding(horizontal = 8.dp, vertical = 2.dp),
+                                            .padding(horizontal = 10.dp, vertical = 3.dp),
                                     ) {
                                         Text(
                                             text = "全文检索",
-                                            style = MaterialTheme.typography.labelSmall,
+                                            style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.SemiBold),
                                             color = MaterialTheme.colorScheme.onSecondaryContainer,
                                         )
                                     }
                                 }
                             },
                             actions = {
-                                IconButton(
-                                    onClick = { state.showSettings = true },
-                                    modifier = Modifier
-                                        .pointerHoverIcon(PointerIcon.Hand)
-                                        .clip(CircleShape),
+                                Surface(
+                                    shape = CircleShape,
+                                    color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                                    modifier = Modifier.size(42.dp),
                                 ) {
-                                    Icon(
-                                        imageVector = GrzebIcons.Settings,
-                                        contentDescription = "设置",
-                                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    )
+                                    IconButton(
+                                        onClick = { state.showSettings = true },
+                                        modifier = Modifier
+                                            .fillMaxSize()
+                                            .pointerHoverIcon(PointerIcon.Hand),
+                                    ) {
+                                        Icon(
+                                            imageVector = GrzebIcons.Settings,
+                                            contentDescription = "设置",
+                                            tint = MaterialTheme.colorScheme.onSurface,
+                                            modifier = Modifier.size(20.dp),
+                                        )
+                                    }
                                 }
                             },
-                        )
-                        HorizontalDivider(
-                            color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f),
                         )
                     }
                 },
