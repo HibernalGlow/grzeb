@@ -21,6 +21,7 @@ import dev.hibernalglow.grzeb.core.text.TextFileTypes
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
 import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.ExperimentalTime
@@ -35,7 +36,40 @@ import kotlin.time.TimeSource
 class SearchUiState {
 
     var query by mutableStateOf("")
-    var directory by mutableStateOf<String?>(null)
+
+    /** 工作区目录列表（支持多文件夹同时检索）。 */
+    val directories = mutableStateListOf<String>()
+
+    /** 主目录（兼容单目录访问与第一工作区）。 */
+    var directory: String?
+        get() = directories.firstOrNull()
+        set(value) {
+            if (value == null) {
+                directories.clear()
+            } else if (value !in directories) {
+                if (directories.isEmpty()) {
+                    directories.add(value)
+                } else {
+                    directories[0] = value
+                }
+            }
+        }
+
+    fun addDirectory(uri: String): Boolean {
+        val trimmed = uri.trim()
+        if (trimmed.isEmpty() || trimmed in directories) return false
+        directories.add(trimmed)
+        return true
+    }
+
+    fun removeDirectory(uri: String) {
+        directories.remove(uri)
+    }
+
+    fun clearDirectories() {
+        directories.clear()
+    }
+
     var isCaseSensitive by mutableStateOf(false)
     var isRegex by mutableStateOf(false)
     var isWholeWord by mutableStateOf(false)
@@ -47,6 +81,12 @@ class SearchUiState {
 
     /** 用户自定义的文件扩展名列表（统一小写带点，如 .custom）。 */
     val customExtensions = mutableStateListOf<String>()
+
+    /** 最近搜索历史关键词列表（最近的排在前面，最多保留 10 条）。 */
+    val searchHistory = mutableStateListOf<String>()
+
+    /** 当前激活/选中的文件类型分类（例如 "code", "docs" 等；null 为全部）。 */
+    var activeCategory by mutableStateOf<String?>(null)
 
     /** 是否正在展示设置界面。 */
     var showSettings by mutableStateOf(false)
@@ -76,10 +116,17 @@ class SearchUiState {
 
     val totalMatches: Int get() = results.sumOf { it.matchCount }
 
-    val canSearch: Boolean get() = directory != null && query.isNotBlank() && !isSearching
+    val canSearch: Boolean get() = (directories.isNotEmpty() || directory != null) && query.isNotBlank() && !isSearching
 
-    fun search(scope: CoroutineScope, fileSystem: GrzebFileSystem, store: IndexStore) {
-        val root = directory ?: return
+    fun search(
+        scope: CoroutineScope,
+        fileSystem: GrzebFileSystem,
+        store: IndexStore,
+        fileSystemProvider: ((String) -> GrzebFileSystem)? = null,
+        rootDisplayNames: Map<String, String> = emptyMap(),
+    ) {
+        val roots = directories.toList().ifEmpty { listOfNotNull(directory) }
+        if (roots.isEmpty()) return
         val text = query.trim()
         if (text.isEmpty()) return
 
@@ -101,6 +148,7 @@ class SearchUiState {
 
         job?.cancel()
         val token = ++runToken
+        addSearchQuery(text)
         results.clear()
         preview = null
         progress = SearchProgress()
@@ -113,24 +161,35 @@ class SearchUiState {
         collapsedFiles = emptySet()
         tree = null
 
-        val engine = SearchEngine(
-            fileSystem = fileSystem,
-            options = options,
-            callbacks = SearchCallbacks(
-                onProgress = { if (token == runToken) progress = it },
-                onResult = {
-                    if (token == runToken) {
-                        results += it
-                        // 结果一条条到，节流重建（树要能看着长出来，但不能每条都重建）
-                        rebuildTree(scope, store)
-                    }
-                },
-            ),
-        )
-
         job = scope.launch {
             try {
-                engine.search(root)
+                coroutineScope {
+                    for (root in roots) {
+                        launch {
+                            val rootFs = fileSystemProvider?.invoke(root) ?: fileSystem
+                            val engine = SearchEngine(
+                                fileSystem = rootFs,
+                                options = options,
+                                callbacks = SearchCallbacks(
+                                    onProgress = { if (token == runToken) progress = it },
+                                    onResult = {
+                                        if (token == runToken) {
+                                            val tagged = if (it.rootUri == null) {
+                                                it.copy(rootUri = root, rootName = rootDisplayNames[root])
+                                            } else {
+                                                it
+                                            }
+                                            results += tagged
+                                            // 结果一条条到，节流重建（树要能看着长出来，但不能每条都重建）
+                                            rebuildTree(scope, store, rootDisplayNames)
+                                        }
+                                    },
+                                ),
+                            )
+                            engine.search(root)
+                        }
+                    }
+                }
             } catch (cancellation: CancellationException) {
                 throw cancellation
             } catch (failure: Throwable) {
@@ -139,7 +198,7 @@ class SearchUiState {
                 if (token == runToken) {
                     isSearching = false
                     progress = null
-                    rebuildTree(scope, store, force = true)
+                    rebuildTree(scope, store, rootDisplayNames, force = true)
                 }
             }
         }
@@ -263,6 +322,29 @@ class SearchUiState {
         customExtensions.clear()
     }
 
+    /**
+     * 添加搜索关键词到最近搜索历史（去除首尾空白，去重，最近在最前，上限 10 条）。
+     */
+    fun addSearchQuery(query: String) {
+        val trimmed = query.trim()
+        if (trimmed.isBlank()) return
+        searchHistory.remove(trimmed)
+        searchHistory.add(0, trimmed)
+        while (searchHistory.size > 10) {
+            searchHistory.removeAt(searchHistory.lastIndex)
+        }
+    }
+
+    /** 从最近搜索历史中移除指定关键词。 */
+    fun removeSearchQuery(query: String) {
+        searchHistory.remove(query.trim())
+    }
+
+    /** 清空全部搜索历史。 */
+    fun clearSearchHistory() {
+        searchHistory.clear()
+    }
+
     // ── 结果树 / 钻取 scope ─────────────────────────────────────────────────
     // 检索结果是"可进入的层级"：目录节点带整个子树的计数，点目录名就钻进这个范围
     // （把该目录当成根的同一份结果子集），面包屑一路可退。树的层级来自索引库，
@@ -306,19 +388,19 @@ class SearchUiState {
     private var treeBuildRunning = false
 
     /** 钻进一个目录：scope 变成它，树按新范围重建。 */
-    fun drillInto(uri: String, scope: CoroutineScope, store: IndexStore) {
+    fun drillInto(uri: String, scope: CoroutineScope, store: IndexStore, rootDisplayNames: Map<String, String> = emptyMap()) {
         if (currentScope == uri) return
         currentScope = uri
         // 换了范围，折叠状态留着没意义（uri 是不同层的）
         collapsedFolders = emptySet()
         collapsedFiles = emptySet()
-        rebuildTree(scope, store, force = true)
+        rebuildTree(scope, store, rootDisplayNames = rootDisplayNames, force = true)
     }
 
     /** 退回上一层（面包屑/返回键用）。 */
-    fun scopeUp(scope: CoroutineScope, store: IndexStore) {
+    fun scopeUp(scope: CoroutineScope, store: IndexStore, rootDisplayNames: Map<String, String> = emptyMap()) {
         val parent = scopePath.dropLast(1).lastOrNull() ?: return
-        drillInto(parent.uri, scope, store)
+        drillInto(parent.uri, scope, store, rootDisplayNames)
     }
 
     fun toggleFolder(uri: String) {
@@ -329,6 +411,35 @@ class SearchUiState {
         collapsedFiles = if (uri in collapsedFiles) collapsedFiles - uri else collapsedFiles + uri
     }
 
+    /** 用于测试或视觉渲染直接载入构建好的结果树。 */
+    fun setTreeForTesting(treeNode: SearchTreeNode, path: List<ScopePath> = emptyList()) {
+        tree = treeNode
+        scopePath = path
+        hasSearched = true
+    }
+
+    /** 全部展开所有目录与文件 */
+    fun expandAll() {
+        collapsedFolders = emptySet()
+        collapsedFiles = emptySet()
+    }
+
+    /** 全部折叠所有目录 */
+    fun collapseAll() {
+        val node = tree ?: return
+        val allFolders = mutableSetOf<String>()
+        fun collect(n: SearchTreeNode) {
+            for (c in n.children) {
+                if (c.isDirectory) {
+                    allFolders += c.uri
+                    collect(c)
+                }
+            }
+        }
+        collect(node)
+        collapsedFolders = allFolders
+    }
+
     /**
      * 按当前 [results] 与 [scope] 重建结果树与面包屑。
      *
@@ -336,20 +447,27 @@ class SearchUiState {
      * 每来一条就重建一次树会让大目录退化成 O(n²)。
      */
     @OptIn(ExperimentalTime::class)
-    fun rebuildTree(scope: CoroutineScope, store: IndexStore, force: Boolean = false) {
-        val root = directory
-        if (root == null || treeBuildRunning) return
+    fun rebuildTree(
+        scope: CoroutineScope,
+        store: IndexStore,
+        rootDisplayNames: Map<String, String> = emptyMap(),
+        force: Boolean = false,
+    ) {
+        val roots = directories.toList().ifEmpty { listOfNotNull(directory) }
+        if (roots.isEmpty() || treeBuildRunning) return
         val mark = TimeSource.Monotonic.markNow()
         if (!force && lastTreeBuild?.let { mark - it < TREE_REBUILD_INTERVAL } == true) return
 
         treeBuildRunning = true
         lastTreeBuild = mark
-        val scoped = currentScope ?: root
+        val isMultiRoot = roots.size > 1
+        val treeRootUri = if (isMultiRoot) SearchTreeBuilder.MULTI_ROOT_URI else roots.first()
+        val scoped = currentScope ?: treeRootUri
         val snapshot = results.toList()
 
         scope.launch {
             try {
-                val builder = SearchTreeBuilder(store, root)
+                val builder = SearchTreeBuilder(store, treeRootUri, rootDisplayNames)
                 scopePath = builder.scopePath(scoped)
                 // 根节点：全折叠时不显示它自己（它就是这个范围），只要它的 children
                 tree = builder.build(snapshot, scoped)
