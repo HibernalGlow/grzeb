@@ -9,7 +9,7 @@
   <a href="https://kotlinlang.org"><img src="https://img.shields.io/badge/Kotlin-2.4.10-7F52FF?style=flat-square" alt="Kotlin 2.4.10"></a>
   <a href="https://www.jetbrains.com/compose-multiplatform/"><img src="https://img.shields.io/badge/Compose_Multiplatform-1.11.1-4285F4?style=flat-square" alt="Compose Multiplatform 1.11.1"></a>
   <a href="https://sqldelight.github.io/sqldelight/"><img src="https://img.shields.io/badge/SQLDelight-2.4.0-E9C46A?style=flat-square" alt="SQLDelight 2.4.0"></a>
-  <img src="https://img.shields.io/badge/version-0.1.0-D0BCFF?style=flat-square" alt="Version 0.1.0">
+  <img src="https://img.shields.io/badge/version-0.2.0-D0BCFF?style=flat-square" alt="Version 0.2.0">
 </p>
 
 <p align="center"><a href="./README.md">简体中文</a> · English</p>
