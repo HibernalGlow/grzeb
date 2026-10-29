@@ -23,14 +23,14 @@ Designed with **Material 3 Expressive (M3E)** guidelines and offering a **VSCode
 
 ### 📥 Quick Downloads
 
-Latest Release: **[v0.2.1](https://github.com/HibernalGlow/grzeb/releases/tag/v0.2.1)**
+Latest Release: **[v0.2.2](https://github.com/HibernalGlow/grzeb/releases/tag/v0.2.2)**
 
 | Platform | Installer / Package | Details |
 | :--- | :--- | :--- |
-| 🍎 **macOS** | [`grzeb-0.2.1-macos.dmg`](https://github.com/HibernalGlow/grzeb/releases/download/v0.2.1/grzeb-0.2.1-macos.dmg) | Native DMG image (run `xattr -cr` or allow via *System Settings → Privacy & Security*) |
-| 🪟 **Windows** | [`grzeb-0.2.1-windows.msi`](https://github.com/HibernalGlow/grzeb/releases/download/v0.2.1/grzeb-0.2.1-windows.msi) | Native MSI Windows Installer |
-| 🐧 **Linux** | [`grzeb-0.2.1-linux.deb`](https://github.com/HibernalGlow/grzeb/releases/download/v0.2.1/grzeb-0.2.1-linux.deb) | Debian / Ubuntu Package |
-| 📱 **Android** | [`grzeb-0.2.1-android-debug.apk`](https://github.com/HibernalGlow/grzeb/releases/download/v0.2.1/grzeb-0.2.1-android-debug.apk) / [`*-release.apk`](https://github.com/HibernalGlow/grzeb/releases/download/v0.2.1/grzeb-0.2.1-android-release.apk) | Direct install for Android 7.0+ (API 24~36, signed) |
+| 🍎 **macOS** | [`grzeb-0.2.2-macos.dmg`](https://github.com/HibernalGlow/grzeb/releases/download/v0.2.2/grzeb-0.2.2-macos.dmg) | Native DMG image (run `xattr -cr` or allow via *System Settings → Privacy & Security*) |
+| 🪟 **Windows** | [`grzeb-0.2.2-windows.msi`](https://github.com/HibernalGlow/grzeb/releases/download/v0.2.2/grzeb-0.2.2-windows.msi) | Native MSI Windows Installer |
+| 🐧 **Linux** | [`grzeb-0.2.2-linux.deb`](https://github.com/HibernalGlow/grzeb/releases/download/v0.2.2/grzeb-0.2.2-linux.deb) | Debian / Ubuntu Package |
+| 📱 **Android** | [`grzeb-0.2.2-android-debug.apk`](https://github.com/HibernalGlow/grzeb/releases/download/v0.2.2/grzeb-0.2.2-android-debug.apk) / [`*-release.apk`](https://github.com/HibernalGlow/grzeb/releases/download/v0.2.2/grzeb-0.2.2-android-release.apk) | Direct install for Android 7.0+ (API 24~36, signed) |
 
 ---
 

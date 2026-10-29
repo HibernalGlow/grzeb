@@ -23,14 +23,14 @@
 
 ### 📥 快速下载安装
 
-最新正式发布版本：**[v0.2.1](https://github.com/HibernalGlow/grzeb/releases/tag/v0.2.1)**
+最新正式发布版本：**[v0.2.2](https://github.com/HibernalGlow/grzeb/releases/tag/v0.2.2)**
 
 | 平台 | 安装包产物 | 说明 |
 | :--- | :--- | :--- |
-| 🍎 **macOS** | [`grzeb-0.2.1-macos.dmg`](https://github.com/HibernalGlow/grzeb/releases/download/v0.2.1/grzeb-0.2.1-macos.dmg) | 原生 DMG 镜像（首次运行在「系统设置 → 隐私与安全性」放行即可） |
-| 🪟 **Windows** | [`grzeb-0.2.1-windows.msi`](https://github.com/HibernalGlow/grzeb/releases/download/v0.2.1/grzeb-0.2.1-windows.msi) | 原生 MSI 安装程序引导 |
-| 🐧 **Linux** | [`grzeb-0.2.1-linux.deb`](https://github.com/HibernalGlow/grzeb/releases/download/v0.2.1/grzeb-0.2.1-linux.deb) | Debian / Ubuntu 软件包 |
-| 📱 **Android** | [`grzeb-0.2.1-android-debug.apk`](https://github.com/HibernalGlow/grzeb/releases/download/v0.2.1/grzeb-0.2.1-android-debug.apk) / [`*-release.apk`](https://github.com/HibernalGlow/grzeb/releases/download/v0.2.1/grzeb-0.2.1-android-release.apk) | 支持 Android 7.0+（API 24~36，已签名可直接安装测试） |
+| 🍎 **macOS** | [`grzeb-0.2.2-macos.dmg`](https://github.com/HibernalGlow/grzeb/releases/download/v0.2.2/grzeb-0.2.2-macos.dmg) | 原生 DMG 镜像（首次运行在「系统设置 → 隐私与安全性」放行即可） |
+| 🪟 **Windows** | [`grzeb-0.2.2-windows.msi`](https://github.com/HibernalGlow/grzeb/releases/download/v0.2.2/grzeb-0.2.2-windows.msi) | 原生 MSI 安装程序引导 |
+| 🐧 **Linux** | [`grzeb-0.2.2-linux.deb`](https://github.com/HibernalGlow/grzeb/releases/download/v0.2.2/grzeb-0.2.2-linux.deb) | Debian / Ubuntu 软件包 |
+| 📱 **Android** | [`grzeb-0.2.2-android-debug.apk`](https://github.com/HibernalGlow/grzeb/releases/download/v0.2.2/grzeb-0.2.2-android-debug.apk) / [`*-release.apk`](https://github.com/HibernalGlow/grzeb/releases/download/v0.2.2/grzeb-0.2.2-android-release.apk) | 支持 Android 7.0+（API 24~36，已签名可直接安装测试） |
 
 ---
 
