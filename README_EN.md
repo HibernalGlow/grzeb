@@ -106,6 +106,7 @@ Text decoding order implemented in `core/src/commonMain/kotlin/dev/hibernalglow/
 | **Full-Text Search** | Yes (multi-workspace parallel search) | Yes (concurrent SAF scanning) |
 | **Reveal in File Manager** | Native (`open -R` / `explorer /select,` / `xdg-open`) | N/A (opens inside in-app preview) |
 | **Adaptive Layout** | Dual-pane resizable sidebar with saved width | Single-pane adaptive navigation |
+| **System Back** | No system back gesture (use the close button) | Predictive back dismisses the preview: it slides with the gesture and reveals the results underneath (Android 13+, on by default on Android 15+) |
 
 ---
 

@@ -109,6 +109,16 @@ class SearchUiState {
     var hasSearched by mutableStateOf(false)
         private set
 
+    /**
+     * 检索轮次计数：每开始一轮新检索自增。
+     *
+     * 界面拿它当 key 重建结果列表的滚动状态 —— 换一轮检索要从顶部看起；
+     * 而同一轮里关掉预览再回来必须停在原处（紧凑窗口下预览会顶掉整个检索面板，
+     * 列表自己的滚动状态活不过那次重组）。
+     */
+    var searchGeneration by mutableStateOf(0)
+        private set
+
     private var job: Job? = null
 
     /** 每轮检索一个令牌：旧轮次的回调 / finally 不再动新轮次的状态。 */
@@ -148,6 +158,7 @@ class SearchUiState {
 
         job?.cancel()
         val token = ++runToken
+        searchGeneration++
         addSearchQuery(text)
         results.clear()
         preview = null

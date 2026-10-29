@@ -3,8 +3,10 @@ package dev.hibernalglow.grzeb.shared.ui.search
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -29,6 +31,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.ButtonDefaults
@@ -53,11 +56,20 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.PointerIcon
 import androidx.compose.ui.input.pointer.pointerHoverIcon
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.semantics.hideFromAccessibility
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import dev.hibernalglow.grzeb.core.fs.GrzebFileSystem
 import dev.hibernalglow.grzeb.core.index.IndexStatus
@@ -72,6 +84,7 @@ import dev.hibernalglow.grzeb.shared.ui.MinListWidth
 import dev.hibernalglow.grzeb.shared.ui.MinPaneWidth
 import dev.hibernalglow.grzeb.shared.ui.PaneDividerWidth
 import dev.hibernalglow.grzeb.shared.ui.PaneResizeHandle
+import dev.hibernalglow.grzeb.shared.ui.PredictiveBackGesture
 import dev.hibernalglow.grzeb.shared.ui.components.Material3SettingsGroup
 import dev.hibernalglow.grzeb.shared.ui.components.Material3SettingsItem
 import dev.hibernalglow.grzeb.shared.ui.components.SettingsPalettes
@@ -137,10 +150,69 @@ fun SearchScreen(
 
     var paneWidthDp by rememberSaveable { mutableStateOf(DefaultPaneWidth.value) }
 
+    // 结果列表的滚动状态挂在预览层之外：开关预览时列表一直留在组合里，
+    // 关掉预览回到原处；换一轮检索则按 generation 重建，仍从顶部看起。
+    val resultListState = remember(state.searchGeneration) { LazyListState() }
+
+    // 预测性返回手势的进度：0f 静止，1f 整屏预览完全滑出。
+    val backProgress = remember { Animatable(0f) }
+
+    val focusManager = LocalFocusManager.current
+    val keyboardController = LocalSoftwareKeyboardController.current
+    val layoutDirection = LocalLayoutDirection.current
+
     BoxWithConstraints(modifier = modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
         val windowClass = windowSizeClassOf(maxWidth)
         val paneWidth = windowClass.detailPaneWidth
         val preview = state.preview
+        val isFullPreview = preview != null && paneWidth == null
+        // BoxWithConstraintsScope 是受限作用域：值要先落到局部量，
+        // 嵌套的 Box/Row lambda 里才拿得到
+        val contentMaxWidth = windowClass.maxContentWidth ?: maxWidth
+        val wideSearchPane = maxWidth >= 600.dp
+
+        // 整屏预览盖住检索面板时收起键盘：不然 imePadding 会让预览高度跟着键盘抖，
+        // 底座里失焦的输入框也不会在滑出动画里闪光标。
+        LaunchedEffect(isFullPreview) {
+            if (isFullPreview) {
+                focusManager.clearFocus()
+                keyboardController?.hide()
+            }
+        }
+
+        // 预览开着时接管系统返回：整屏预览跟着预测性返回手势滑出，提交后关闭；
+        // 宽屏侧栏没有滑动过程，提交时直接关掉。
+        PredictiveBackGesture(
+            enabled = preview != null,
+            onProgress = { backProgress.snapTo(it) },
+            onCancel = {
+                scope.launch {
+                    backProgress.animateTo(
+                        targetValue = 0f,
+                        animationSpec = spring(
+                            dampingRatio = Spring.DampingRatioNoBouncy,
+                            stiffness = Spring.StiffnessMediumLow,
+                        ),
+                    )
+                }
+            },
+            onDismiss = {
+                if (isFullPreview) {
+                    scope.launch {
+                        // 手势提交时不一定已经划到底，补完剩下的一段再摘掉这一层
+                        backProgress.animateTo(1f, tween(durationMillis = 120))
+                        state.preview = null
+                        backProgress.snapTo(0f)
+                    }
+                } else {
+                    state.preview = null
+                }
+            },
+        )
+
+        LaunchedEffect(preview) {
+            if (preview == null) backProgress.snapTo(0f)
+        }
 
         when {
             preview != null && paneWidth != null -> {
@@ -149,7 +221,7 @@ fun SearchScreen(
                 val pane = paneWidthDp.dp.coerceIn(MinPaneWidth, maxPane)
                 val shellWidth = minOf(
                     maxWidth,
-                    (windowClass.maxContentWidth ?: maxWidth) + pane + PaneDividerWidth,
+                    contentMaxWidth + pane + PaneDividerWidth,
                 )
                 val listWidth = shellWidth - pane - PaneDividerWidth
                 Row(Modifier.fillMaxSize(), horizontalArrangement = Arrangement.Center) {
@@ -158,6 +230,7 @@ fun SearchScreen(
                         services = services,
                         fileSystem = fileSystem,
                         indexStore = indexStore,
+                        resultListState = resultListState,
                         isWide = false,
                         modifier = Modifier.width(listWidth).fillMaxHeight(),
                     )
@@ -178,24 +251,68 @@ fun SearchScreen(
                 }
             }
 
-            preview != null -> FilePreviewPane(
-                selection = preview,
-                fileSystem = fileSystem,
-                canReveal = services.isRevealSupported,
-                onDismiss = { state.preview = null },
-                onOpenExternally = openExternally,
-                onReveal = reveal,
-                modifier = Modifier.widthIn(max = windowClass.maxContentWidth ?: maxWidth).fillMaxSize(),
-            )
+            else -> Box(
+                modifier = Modifier.fillMaxSize().clipToBounds(),
+                contentAlignment = Alignment.TopCenter,
+            ) {
+                // 底座常驻：关预览时露出来的是同一份列表，滚动位置与折叠状态都还在，
+                // 预测性返回的过程中也能提前看到退回去的那一屏
+                SearchPane(
+                    state = state,
+                    services = services,
+                    fileSystem = fileSystem,
+                    indexStore = indexStore,
+                    resultListState = resultListState,
+                    isWide = wideSearchPane,
+                    modifier = Modifier
+                        .widthIn(max = contentMaxWidth)
+                        .fillMaxSize()
+                        // 预览盖在上面时，底座对读屏器也应该是不可见的
+                        .then(
+                            if (preview != null) {
+                                Modifier.semantics { hideFromAccessibility() }
+                            } else {
+                                Modifier
+                            },
+                        ),
+                )
 
-            else -> SearchPane(
-                state = state,
-                services = services,
-                fileSystem = fileSystem,
-                indexStore = indexStore,
-                isWide = maxWidth >= 600.dp,
-                modifier = Modifier.widthIn(max = windowClass.maxContentWidth ?: maxWidth).fillMaxSize(),
-            )
+                if (preview != null) {
+                    // 挡住底座的指针事件：预览里的空白区域不能把点击漏给下面的列表
+                    Box(
+                        Modifier
+                            .fillMaxSize()
+                            .pointerInput(Unit) {
+                                awaitPointerEventScope {
+                                    while (true) {
+                                        awaitPointerEvent().changes.forEach { it.consume() }
+                                    }
+                                }
+                            },
+                    )
+
+                    FilePreviewPane(
+                        selection = preview,
+                        fileSystem = fileSystem,
+                        canReveal = services.isRevealSupported,
+                        onDismiss = { state.preview = null },
+                        onOpenExternally = openExternally,
+                        onReveal = reveal,
+                        modifier = Modifier
+                            .widthIn(max = contentMaxWidth)
+                            .fillMaxSize()
+                            .graphicsLayer {
+                                // 跟着预测性返回手势滑出：露出下面的检索结果（RTL 下反向）
+                                val direction = if (layoutDirection == LayoutDirection.Rtl) -1f else 1f
+                                translationX = size.width * backProgress.value * direction
+                                val scale = 1f - 0.06f * backProgress.value
+                                scaleX = scale
+                                scaleY = scale
+                                alpha = 1f - 0.25f * backProgress.value
+                            },
+                    )
+                }
+            }
         }
     }
 }
@@ -210,6 +327,7 @@ private fun SearchPane(
     services: PlatformServices,
     fileSystem: GrzebFileSystem,
     indexStore: IndexStore,
+    resultListState: LazyListState,
     isWide: Boolean = false,
     modifier: Modifier = Modifier,
 ) {
@@ -419,6 +537,7 @@ private fun SearchPane(
                         collapsedFolders = state.collapsedFolders,
                         collapsedFiles = state.collapsedFiles,
                         selectedUri = state.preview?.file?.uri,
+                        listState = resultListState,
                         onToggleFolder = state::toggleFolder,
                         onToggleFile = state::toggleFile,
                         onDrill = { uri -> state.drillInto(uri, scope, indexStore, rootDisplayNames) },

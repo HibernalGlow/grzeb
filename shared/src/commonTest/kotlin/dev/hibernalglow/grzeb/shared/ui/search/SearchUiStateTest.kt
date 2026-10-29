@@ -1,5 +1,10 @@
 package dev.hibernalglow.grzeb.shared.ui.search
 
+import dev.hibernalglow.grzeb.core.fs.FileEntry
+import dev.hibernalglow.grzeb.core.fs.GrzebFileSystem
+import dev.hibernalglow.grzeb.core.index.InMemoryIndexStore
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -139,5 +144,36 @@ class SearchUiStateTest {
         state.expandAll()
         assertTrue(state.collapsedFolders.isEmpty())
         assertTrue(state.collapsedFiles.isEmpty())
+    }
+
+    /**
+     * 结果列表的滚动状态以 [SearchUiState.searchGeneration] 为 key 重建：
+     * 换一轮检索必须换一个新 key（回到顶部），同一轮内开关预览则不变。
+     */
+    @Test
+    fun `each search run starts a new generation`() {
+        val state = SearchUiState()
+        state.directory = "/root"
+        val scope = CoroutineScope(Dispatchers.Unconfined)
+        val fileSystem = EmptyFileSystem()
+        val store = InMemoryIndexStore()
+
+        val initial = state.searchGeneration
+
+        state.query = "alpha"
+        state.search(scope, fileSystem, store)
+        assertEquals(initial + 1, state.searchGeneration, "开始第一轮检索应换一个 generation")
+
+        state.query = "beta"
+        state.search(scope, fileSystem, store)
+        assertEquals(initial + 2, state.searchGeneration, "开始第二轮检索应再换一个 generation")
+    }
+
+    private class EmptyFileSystem : GrzebFileSystem {
+        override val isSupported: Boolean = true
+        override suspend fun list(uri: String): List<FileEntry> = emptyList()
+        override suspend fun readText(uri: String): String? = null
+        override fun displayName(uri: String): String = uri
+        override fun rootLocation(): String? = "/root"
     }
 }

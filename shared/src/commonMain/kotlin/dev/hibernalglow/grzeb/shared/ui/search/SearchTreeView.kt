@@ -21,6 +21,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
@@ -176,6 +177,8 @@ fun SearchResultTree(
     collapsedFolders: Set<String>,
     collapsedFiles: Set<String>,
     selectedUri: String?,
+    /** 滚动状态由调用方持有：紧凑窗口的预览会顶掉整个面板，状态放里面会跟着销毁。 */
+    listState: LazyListState,
     onToggleFolder: (String) -> Unit,
     onToggleFile: (String) -> Unit,
     onDrill: (String) -> Unit,
@@ -199,6 +202,7 @@ fun SearchResultTree(
 
         LazyColumn(
             modifier = Modifier.fillMaxSize(),
+            state = listState,
             contentPadding = PaddingValues(start = 8.dp, end = 12.dp, top = 4.dp, bottom = 24.dp),
         ) {
             items(rows, key = { it.node.uri }) { row ->
